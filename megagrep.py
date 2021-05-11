@@ -22,7 +22,6 @@ optional arguments:
   -v, --verbose         Verbose mode.
   -s, --sensitive       Enable case-sensitive mode (default is case
                         insensitive).
-  -A, --all             Run all scan modes successively.
   -K, --keyword         Search by keywords from a dictionary file (default
                         mode).
   -S, --stat            Give only statistics about the code (rely on other
@@ -44,11 +43,11 @@ optional arguments:
 """
 
 from os import access, R_OK, getcwd, walk
-from os.path import sep, dirname, join, realpath, exists, isfile
+from os.path import sep, dirname, join, realpath, exists, isfile, basename
 from textwrap import fill
 from argparse import ArgumentParser
 from importlib.util import find_spec
-from re import compile as re_compile
+from re import finditer, compile as re_compile
 
 ###############################################################################
 # CONFIGURATION                                                               #
@@ -142,12 +141,13 @@ def CHECKFILE(filename: str) -> bool:
 # Constants                                                                   #
 #-----------------------------------------------------------------------------#
 
+# Default values
 D_VERBOSE = False
 D_SENSITIVE = False
-D_ALL = False
 D_KEYWORD = True
 D_STAT = False
 D_COMMENT = False
+D_STRINGS = False
 D_INCLUDE = None
 D_EXCLUDE = (".min.js")
 D_WORD = None
@@ -156,16 +156,16 @@ D_LIST = None
 D_CSV = False
 D_FILE = None
 
+# Help messages
 H_MEGAGREP = "Megagrep helps beginning a code review by looking at keywords \
 using \"grep\". This is not a static analysis tool, it just searches for \
 places in the code that require to be investigated manually."
-
 H_VERBOSE = "Verbose mode."
 H_SENSITIVE = "Enable case-sensitive mode (default is case insensitive)."
-H_ALL = "Run all scan modes successively."
 H_KEYWORD = "Search by keywords from a dictionary file (default mode)."
 H_STAT = "Give only statistics about the code (rely on other modes)."
 H_COMMENT = "Search comments in the code."
+H_STRINGS = "Search strings in the code."
 H_INCLUDE = "Files to include in search (ex: *.java)."
 H_EXCLUDE = "Files to exclude from search (ex: *.min.js)."
 H_WORD = "Search for specific word(s)."
@@ -174,11 +174,13 @@ H_LIST = "Use specific list from dictionary file(s)."
 H_CSV = "Output in CSV format (default is colored ASCII)."
 H_FILE = "Output to file."
 
+# Meta text
 M_FILE = "file(s)"
 M_WORD = "word(s)"
 M_LIST = "list(s)"
 M_NAME = "filename"
 
+# Options dictionary
 SOPT = 0 # Short option
 LOPT = 1 # Long option
 HOPT = 2 # Help
@@ -189,10 +191,10 @@ OPTS_DICT = (
     ("-v", "--verbose", H_VERBOSE, D_VERBOSE, None),
     ("-s", "--sensitive", H_SENSITIVE, D_SENSITIVE, None),
     # Mode
-    ("-A", "--all", H_ALL, D_ALL, None),
     ("-K", "--keyword", H_KEYWORD, D_KEYWORD, None),
     ("-S", "--stat", H_STAT, D_STAT, None),
     ("-C", "--comment", H_COMMENT, D_COMMENT, None),
+    ("-T", "--strings", H_STRINGS, D_STRINGS, None),
     # Input
     ("-i", "--include", H_INCLUDE, D_INCLUDE, M_FILE),
     ("-x", "--exclude", H_EXCLUDE, D_EXCLUDE, M_FILE),
@@ -333,10 +335,50 @@ def init_include_exclude() -> (list, list):
 # SEARCH                                                                      #
 ###############################################################################
 
+#-----------------------------------------------------------------------------#
+# Result object                                                               #
+#-----------------------------------------------------------------------------#
+
+class Result(object):
+    """TODO"""
+    def __init__(self, line_no: int=0, line: str="", found: object=None,
+                 path: str="") -> None:
+        self.line_no = line_no
+        self.line = line
+        self.found = found
+        self.path = path
+
+    @property
+    def keywords(self):
+        """TODO"""
+        return list(set([x[1] for x in self.found]))
+
+    def highlight(self) -> str:
+        """Change color for all keywords found in line."""
+        if not IS_TERMCOLOR:
+            return self.line
+        hlstr = []
+        start = 0
+        for idx, keyword in self.found:
+            if start > idx:
+                continue
+            hlstr.append(self.line[start:idx])
+            hlstr.append(colored(self.line[idx:idx+len(keyword)], "red", attrs=["bold"]))
+            start = idx + len(keyword)
+        hlstr.append(self.line[start:len(self.line)])
+        return "".join(hlstr)
+
+    def __str__(self):
+        """TODO"""
+        loc = "{0}:{1}".format(self.path, self.line_no)
+        found = ", ".join(self.keywords)
+        if IS_TERMCOLOR:
+            return "{0}: {1} ({2})".format(colored(loc, "cyan"), self.highlight(),
+                                           colored(found, "magenta"))
+        return "{0}: {1} (2)".format(loc, self.line, found)
+
 def is_included(filename: str) -> bool:
     """Check if filename should be scanned considering include/exclude lists."""
-    if not len(INCLUDE) and not len(EXCLUDE):
-        return True
     # Exclude list
     for entry in EXCLUDE:
         if entry.match(filename):
@@ -345,17 +387,66 @@ def is_included(filename: str) -> bool:
     for entry in INCLUDE:
         if entry.match(filename):
             return True
+    if not len(INCLUDE):
+        return True
     return False
+
+def code_generator(filename: str):
+    """TODO"""
+    with open(filename, 'r') as fd:
+        ct = 1
+        for line in fd:
+            line = line.strip()
+            if not len(line):
+                continue
+            # Look for keywords
+            found = []
+            for keyword in KEYWORDS:
+                if OPTIONS.sensitive:
+                    index = [m.start() for m in finditer(keyword, line)]
+                else:
+                    index = [m.start() for m in finditer(keyword.lower(), line.lower())]
+                if len(index):
+                    for i in index:
+                        found.append((i, keyword))
+            # Time to yield if keyword found
+            if len(found):
+                yield ct, line, sorted(found)
+            ct += 1
+
+def comment_generator(filename: str):
+    """TODO"""
+    raise NotImplementedError("comment_generator")
+
+def strings_generator(filename: str):
+    """TODO"""
+    raise NotImplementedError("strings_generator")
+
+def select_generator() -> object:
+    """Return the appropriate generator function depending on the mode."""
+    if OPTIONS.keyword or OPTIONS.stat:
+        return code_generator
+    elif OPTIONS.comment:
+        return comment_generator
+    elif OPTIONS.strings:
+        return strings_generator
+    ERROR("Unknown mode.")
 
 def search(basepath:str) -> list:
     """Search keywords in all matching files from path."""
-    for path, _, files in walk(basepath):
-        if path.startswith("."): # Ignore hidden files, . and ..
-            continue
+    results = []
+    generator = select_generator()
+    for path, dirs, files in walk(basepath):
+        # Ignore hidden
+        files = [f for f in files if not f[0] == '.']
+        dirs[:] = [d for d in dirs if not d[0] == '.']
         for item in files:
             # Apply include and exclude list on item name
             if is_included(item):
-                print(item) # TODO: Extract stuff :)
+                item_path = join(path, item)
+                for nb, line, content in generator(item_path):
+                    results.append(Result(nb, line, content, item_path))
+    return results
 
 ###############################################################################
 # RUN                                                                         #
@@ -387,3 +478,5 @@ VERBOSE("{0:-^69}".format(" Start scan "))
 #--- Search -------------------------------------------------------------------#
 
 RESULTS = search(PATH)
+for result in RESULTS:
+    print(result)
