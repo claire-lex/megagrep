@@ -43,7 +43,7 @@ optional arguments:
                         Output to file.
 """
 
-from os import access, R_OK
+from os import access, R_OK, getcwd, walk
 from os.path import sep, dirname, join, realpath, exists, isfile
 from textwrap import fill
 from argparse import ArgumentParser
@@ -99,6 +99,15 @@ def WARNING(message: str) -> None:
         print(colored(fill("[WARNING] {0}".format(message), width=80), "red"))
     else:
         print(fill("[WARNING] {0}".format(message), width=80))
+
+def ERROR(message: str) -> None:
+    """Prints error messages to stdout and exits."""
+    if IS_TERMCOLOR:
+        print(colored(fill("[ERROR]   {0}".format(message), width=80), "red",
+                      attrs=["bold"]))
+    else:
+        print(fill("[ERROR]   {0}".format(message), width=80))
+    exit(-1)
 
 #-----------------------------------------------------------------------------#
 # File management                                                             #
@@ -286,6 +295,69 @@ def init_keywords() -> dict:
     return keywords
 
 ###############################################################################
+# FILE PARSING                                                                #
+###############################################################################
+
+def init_path() -> list:
+    """Set path to start the scan from.
+    If no path specified, start from current working directory.
+
+    Megagrep is recursive, if you choose a directory, everything inside
+    (except the exclude list) will be scanned.
+    """
+    if not OPTIONS.path:
+        return getcwd()
+    path = realpath(OPTIONS.path)
+    if not CHECKFILE(path):
+        ERROR("File {0} cannot be opened.".format(path))
+    return path
+
+def init_include_exclude() -> (list, list):
+    """Set the list of files or pattern to include and exclude.
+
+    Relies on option ``--include`` and ``--exclude``.
+
+    Include goes first: if both include and exclude patterns are specified,
+    the exclude list will apply to the included one. Example::
+
+      megagrep -i *.js -x *.min.js # Includes only .js files but no .min.js
+      megagrep -x toto.py -i *.py # Includes all .py file except toto.py
+      megagrep -x *.java -i *.java # Empty: included content is excluded
+    """
+    REGEX = lambda x: re_compile("^"+x.replace(".", "\.").replace("*", ".*")+"$")
+    include = [REGEX(x) for x in OPTIONS.include.split(",")] if OPTIONS.include else []
+    exclude = [REGEX(x) for x in OPTIONS.exclude.split(",")] if OPTIONS.exclude else []
+    return include, exclude
+
+###############################################################################
+# SEARCH                                                                      #
+###############################################################################
+
+def is_included(filename: str) -> bool:
+    """Check if filename should be scanned considering include/exclude lists."""
+    if not len(INCLUDE) and not len(EXCLUDE):
+        return True
+    # Exclude list
+    for entry in EXCLUDE:
+        if entry.match(filename):
+            return False
+    # Include list
+    for entry in INCLUDE:
+        if entry.match(filename):
+            return True
+    return False
+
+def search(basepath:str) -> list:
+    """Search keywords in all matching files from path."""
+    for path, _, files in walk(basepath):
+        if path.startswith("."): # Ignore hidden files, . and ..
+            continue
+        for item in files:
+            # Apply include and exclude list on item name
+            if is_included(item):
+                print(item) # TODO: Extract stuff :)
+
+###############################################################################
 # RUN                                                                         #
 ###############################################################################
 
@@ -301,6 +373,17 @@ print("{0:-^79}".format(""))
 #--- Init -------------------------------------------------------------------#
 
 OPTIONS = init_options()
+VERBOSE("{0:-^69}".format(" Initialization "))
 VERBOSE("Options: {0}".format(OPTIONS.__dict__))
 KEYWORDS = init_keywords()
 VERBOSE("Keywords: {0}".format(", ".join(KEYWORDS)))
+PATH = init_path()
+VERBOSE("Path to scan (recursive): {0}".format(PATH))
+INCLUDE, EXCLUDE = init_include_exclude()
+VERBOSE("File included: {0}".format(OPTIONS.include))
+VERBOSE("File excluded: {0}".format(OPTIONS.exclude))
+VERBOSE("{0:-^69}".format(" Start scan "))
+
+#--- Search -------------------------------------------------------------------#
+
+RESULTS = search(PATH)
