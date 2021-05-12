@@ -33,6 +33,20 @@ Run with standard options and dictionary on a directory:
 python megagrep.py /path/to/my/code
 ```
 
+Status
+------
+
+So far, only the basic scan based on keywords with output on terminal works.
+
+Coming soon:
+
+* Display output as CSV
+* Save output to file
+* "Stat" mode: Only display statistics about megagrep results.
+* "Comment" mode: Extract comments from source files.
+* "String" mode: Look for strings in source files.
+* Add direct regex support in dictionaries with prefix `regex:`
+
 Usage
 -----
 
@@ -48,7 +62,7 @@ $> python megagrep.py -h
                                  \|         \|          \|    
 
 -------------------------------------------------------------------------------
-usage: megagrep.py [-h] [-v] [-s] [-A] [-K] [-S] [-C] [-i files)] [-x file(s)]
+usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-C] [-T] [-i files)] [-x file(s)]
                    [-w word(s)] [-d file(s)] [-l list(s] [-c] [-f filename]
                    [path]
 
@@ -64,12 +78,12 @@ optional arguments:
   -v, --verbose         Verbose mode.
   -s, --sensitive       Enable case-sensitive mode (default is case
                         insensitive).
-  -A, --all             Run all scan modes successively.
   -K, --keyword         Search by keywords from a dictionary file (default
                         mode).
   -S, --stat            Give only statistics about the code (rely on other
                         modes).
   -C, --comment         Search comments in the code.
+  -T, --strings         Search strings in the code.
   -i file(s), --include file(s)
                         Files to include in search (ex: *.java).
   -x file(s), --exclude file(s)
@@ -85,7 +99,42 @@ optional arguments:
                         Output to file.
 ```
 
-Coming soon
------------
+Use/write dictionaries
+----------------------
 
-* "String" mode: Look for strings in the source file.
+You can use default dictionaries in ``dicts/`` and also use your own:
+
+```
+python megagrep.py -d path/to/dictionary
+```
+
+A dictionary has the following format:
+
+```
+# Comment line
+
+[line_name]
+keyword1
+keyword2 # Comment at the end
+matching_keyw*d
+```
+
+Example:
+
+```
+# Global keywords
+
+[authentication]
+auth* # authentication and authorization stuff
+login
+passw*d
+pwd
+session
+admin*
+```
+
+You can choose to use only part of a dictionary with ``-l``:
+
+```
+python megagrep.py -l authentication
+```

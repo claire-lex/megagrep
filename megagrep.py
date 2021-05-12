@@ -43,17 +43,18 @@ optional arguments:
 """
 
 from os import access, R_OK, getcwd, walk
-from os.path import sep, dirname, join, realpath, exists, isfile, basename
+from os.path import sep, dirname, join, realpath, exists, isfile
 from textwrap import fill
 from argparse import ArgumentParser
 from importlib.util import find_spec
-from re import finditer, compile as re_compile
+from re import finditer, IGNORECASE, compile as re_compile
 
 ###############################################################################
 # CONFIGURATION                                                               #
 ###############################################################################
 
-DEFAULT_DICTIONARY = "megagrep.dict"
+DEFAULT_DICTIONARY = join("dicts", "global.mg")
+DEFAULT_EXCLUDE = ("*.min.js,*.css")
 COMMENT_TAG = "#"
 LIST_REGEX = re_compile(r"^\[([\w\-\_\+]*)\]$")
 
@@ -124,12 +125,12 @@ def REALPATH(filename: str) -> str:
         filename = join(dirname(realpath(__file__)), filename)
     return realpath(filename)
 
-def CHECKFILE(filename: str) -> bool:
+def CHECKFILE(filename: str, force_file=False) -> bool:
     """Check if source file exists. Returns True or False"""
     fullarg = realpath(filename)
-    if not exists(fullarg):
+    if not exists(fullarg) or not access(fullarg, R_OK):
         return False
-    elif not isfile(fullarg) or not access(fullarg, R_OK):
+    if force_file and not isfile(fullarg):
         return False
     return True
 
@@ -149,7 +150,7 @@ D_STAT = False
 D_COMMENT = False
 D_STRINGS = False
 D_INCLUDE = None
-D_EXCLUDE = (".min.js")
+D_EXCLUDE = DEFAULT_EXCLUDE
 D_WORD = None
 D_DICT = None
 D_LIST = None
@@ -249,7 +250,7 @@ def parse_dict(dictfile: str, categories: list=None) -> list:
     keywords = []
     dictfile = realpath(dictfile)
     current = None
-    if not CHECKFILE(dictfile):
+    if not CHECKFILE(dictfile, force_file=True):
         WARNING("File {0} cannot be opened.".format(dictfile))
         return []
     VERBOSE("Adding dictionary: {0}".format(dictfile))
@@ -277,7 +278,13 @@ def init_keywords() -> dict:
     Using the option ``dict`` alone replace the default dictionary with dict.
     Using both ``word`` and ``dict`` combines both.
     """
+    if OPTIONS.sensitive:
+        REGEX = lambda x: re_compile(x.replace(".", r"\.").replace("*", ".*"))
+    else:
+        REGEX = lambda x: re_compile(x.replace(".", r"\.").replace("*", ".*"),
+                                     IGNORECASE)
     keywords = []
+    k_regex = [] # keywords compiled regex
     categories = []
     # OPTION LIST
     if OPTIONS.list:
@@ -286,15 +293,18 @@ def init_keywords() -> dict:
     # OPTION WORD
     if OPTIONS.word:
         keywords += OPTIONS.word.split(",")
+        k_regex += [REGEX(x) for x in keywords]
     # OPTION DICT
     if OPTIONS.dict:
         dictionaries = OPTIONS.dict.split(",")
         for dictfile in dictionaries:
             keywords += parse_dict(dictfile, categories)
+            k_regex += [REGEX(x) for x in keywords]
     # DEFAULT DICTIONARY
     if not keywords:
-        keywords = parse_dict(REALPATH(DEFAULT_DICTIONARY), categories)
-    return keywords
+        keywords += parse_dict(REALPATH(DEFAULT_DICTIONARY), categories)
+        k_regex += [REGEX(x) for x in keywords]
+    return keywords, k_regex
 
 ###############################################################################
 # FILE PARSING                                                                #
@@ -326,7 +336,7 @@ def init_include_exclude() -> (list, list):
       megagrep -x toto.py -i *.py # Includes all .py file except toto.py
       megagrep -x *.java -i *.java # Empty: included content is excluded
     """
-    REGEX = lambda x: re_compile("^"+x.replace(".", "\.").replace("*", ".*")+"$")
+    REGEX = lambda x: re_compile("^"+x.replace(".", r"\.").replace("*", ".*")+"$")
     include = [REGEX(x) for x in OPTIONS.include.split(",")] if OPTIONS.include else []
     exclude = [REGEX(x) for x in OPTIONS.exclude.split(",")] if OPTIONS.exclude else []
     return include, exclude
@@ -340,7 +350,15 @@ def init_include_exclude() -> (list, list):
 #-----------------------------------------------------------------------------#
 
 class Result(object):
-    """TODO"""
+    """Object containing all the information associated to one line of results.
+
+    This class also provides methods for reading and formatting results output.
+
+    :param line_no: Line number associated to the result as an int
+    :param line: Full line containing matching patterns as a string
+    :param found: List of found keyword as tuples (index, keyword)
+    :param path: Full path to the file containing the result line.
+    """
     def __init__(self, line_no: int=0, line: str="", found: object=None,
                  path: str="") -> None:
         self.line_no = line_no
@@ -350,7 +368,7 @@ class Result(object):
 
     @property
     def keywords(self):
-        """TODO"""
+        """Returns a list of unique keywords found in result line."""
         return list(set([x[1] for x in self.found]))
 
     def highlight(self) -> str:
@@ -369,13 +387,43 @@ class Result(object):
         return "".join(hlstr)
 
     def __str__(self):
-        """TODO"""
+        """Returns the result as a string with all megagrep info."""
         loc = "{0}:{1}".format(self.path, self.line_no)
         found = ", ".join(self.keywords)
         if IS_TERMCOLOR:
             return "{0}: {1} ({2})".format(colored(loc, "cyan"), self.highlight(),
                                            colored(found, "magenta"))
-        return "{0}: {1} (2)".format(loc, self.line, found)
+        return "{0}: {1} {2}".format(loc, self.line, found)
+
+#-----------------------------------------------------------------------------#
+# Stats object                                                                #
+#-----------------------------------------------------------------------------#
+
+class Stats(object):
+    """Object containing all statistics about a megagrep scan.
+
+    :param nb_file: Total number of scanned files.
+    :param nb_line: Total number of scanned lines.
+    TODO
+    """
+    def __init__(self) -> None:
+        self.nb_file = 0
+        self.nb_line = 0
+        self.nb_resline = 0
+        self.nb_result = 0
+
+    def __str__(self) -> str:
+        """Returns scans statistics as a nice string :)"""
+        string = []
+        string.append("* Total number of files: {0}".format(self.nb_file))
+        string.append("* Total number of lines: {0}".format(self.nb_line))
+        string.append("* Total number of results: {0}".format(self.nb_result))
+        string.append("* Number of lines with results: {0}".format(self.nb_resline))
+        return "\n".join(string)
+
+#-----------------------------------------------------------------------------#
+# Actual search                                                               #
+#-----------------------------------------------------------------------------#
 
 def is_included(filename: str) -> bool:
     """Check if filename should be scanned considering include/exclude lists."""
@@ -391,34 +439,48 @@ def is_included(filename: str) -> bool:
         return True
     return False
 
-def code_generator(filename: str):
-    """TODO"""
-    with open(filename, 'r') as fd:
-        ct = 1
-        for line in fd:
-            line = line.strip()
-            if not len(line):
-                continue
-            # Look for keywords
-            found = []
-            for keyword in KEYWORDS:
-                if OPTIONS.sensitive:
-                    index = [m.start() for m in finditer(keyword, line)]
-                else:
-                    index = [m.start() for m in finditer(keyword.lower(), line.lower())]
-                if len(index):
-                    for i in index:
-                        found.append((i, keyword))
-            # Time to yield if keyword found
-            if len(found):
-                yield ct, line, sorted(found)
-            ct += 1
+def code_generator(filename: str, stats: Stats):
+    """Open a file and yield each line where at least one keyword was found.
 
-def comment_generator(filename: str):
+    Returns a tuple with format::
+
+      line_no, line, list of keyword found with indexes.
+
+    Keyword list is a list of tuple with format (index, name). Example::
+
+      [(2, passwd), (10, sql), (36, passwd)]
+    """
+    try:
+        VERBOSE("Scanning file {0}...".format(filename))
+        with open(filename, 'r') as fd:
+            stats.nb_file += 1
+            ct = 1
+            for line in fd:
+                stats.nb_line += 1
+                line = line.strip()
+                if not len(line):
+                    continue
+                # Look for keywords
+                found = []
+                for keyword, k_regex in zip(KEYWORDS, K_REGEX):
+                    index = [m.start() for m in finditer(k_regex, line)]
+                    if len(index):
+                        for i in index:
+                            stats.nb_result += 1
+                            found.append((i, keyword))
+                # Time to yield if keyword found
+                if len(found):
+                    stats.nb_resline += 1
+                    yield ct, line, sorted(found)
+                ct += 1
+    except (IOError, UnicodeDecodeError):
+        WARNING("Error while parsing file {0}.".format(filename))
+
+def comment_generator(filename: str, stats: Stats):
     """TODO"""
     raise NotImplementedError("comment_generator")
 
-def strings_generator(filename: str):
+def strings_generator(filename: str, stats: Stats):
     """TODO"""
     raise NotImplementedError("strings_generator")
 
@@ -432,8 +494,9 @@ def select_generator() -> object:
         return strings_generator
     ERROR("Unknown mode.")
 
-def search(basepath:str) -> list:
+def search(basepath: str) -> list:
     """Search keywords in all matching files from path."""
+    stats = Stats()
     results = []
     generator = select_generator()
     for path, dirs, files in walk(basepath):
@@ -444,9 +507,9 @@ def search(basepath:str) -> list:
             # Apply include and exclude list on item name
             if is_included(item):
                 item_path = join(path, item)
-                for nb, line, content in generator(item_path):
+                for nb, line, content in generator(item_path, stats):
                     results.append(Result(nb, line, content, item_path))
-    return results
+    return results, stats
 
 ###############################################################################
 # RUN                                                                         #
@@ -466,8 +529,8 @@ print("{0:-^79}".format(""))
 OPTIONS = init_options()
 VERBOSE("{0:-^69}".format(" Initialization "))
 VERBOSE("Options: {0}".format(OPTIONS.__dict__))
-KEYWORDS = init_keywords()
-VERBOSE("Keywords: {0}".format(", ".join(KEYWORDS)))
+KEYWORDS, K_REGEX = init_keywords()
+VERBOSE("Keywords: {0}".format(KEYWORDS))
 PATH = init_path()
 VERBOSE("Path to scan (recursive): {0}".format(PATH))
 INCLUDE, EXCLUDE = init_include_exclude()
@@ -477,6 +540,25 @@ VERBOSE("{0:-^69}".format(" Start scan "))
 
 #--- Search -------------------------------------------------------------------#
 
-RESULTS = search(PATH)
-for result in RESULTS:
-    print(result)
+RESULTS, STATS = search(PATH)
+
+#--- Output -------------------------------------------------------------------#
+
+VERBOSE("{0:-^69}".format(" Output "))
+
+if OPTIONS.csv:
+    raise NotImplementedError("Option: Output as CSV.")
+if OPTIONS.file:
+    raise NotImplementedError("Option: Export to file.")
+
+# All modes print stat at the end.
+# When in mode "stat" we just don't print results details.
+if not OPTIONS.stat:
+    for result in RESULTS:
+        print(result)
+
+if OPTIONS.stat:
+    raise NotImplementedError("Option: Output stats about megagrep results.")
+
+print("{0:-^79}".format(" Summary "))
+print(STATS)
