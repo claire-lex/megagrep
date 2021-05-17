@@ -40,12 +40,12 @@ So far, only the basic scan based on keywords with output on terminal works.
 
 Coming soon:
 
-* Display output as CSV
 * Save output to file
 * "Stat" mode: Only display statistics about megagrep results.
 * "Comment" mode: Extract comments from source files.
 * "String" mode: Look for strings in source files.
 * Add direct regex support in dictionaries with prefix `regex:`
+* "Extended" output mode, with previous and next line printed
 
 Usage
 -----
@@ -113,7 +113,7 @@ A dictionary has the following format:
 ```
 # Comment line
 
-[line_name]
+[list_name]
 keyword1
 keyword2 # Comment at the end
 matching_keyw*d

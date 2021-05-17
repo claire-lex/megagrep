@@ -43,11 +43,11 @@ optional arguments:
 """
 
 from os import access, R_OK, getcwd, walk
-from os.path import sep, dirname, join, realpath, exists, isfile
+from os.path import sep, dirname, join, realpath, exists, isfile, basename
 from textwrap import fill
 from argparse import ArgumentParser
 from importlib.util import find_spec
-from re import finditer, IGNORECASE, compile as re_compile
+from re import finditer, IGNORECASE, compile as re_compile, search as re_search
 
 ###############################################################################
 # CONFIGURATION                                                               #
@@ -56,6 +56,7 @@ from re import finditer, IGNORECASE, compile as re_compile
 DEFAULT_DICTIONARY = join("dicts", "global.mg")
 DEFAULT_EXCLUDE = ("*.min.js,*.css")
 COMMENT_TAG = "#"
+CSV_TAG = ","
 LIST_REGEX = re_compile(r"^\[([\w\-\_\+]*)\]$")
 
 ###############################################################################
@@ -365,11 +366,29 @@ class Result(object):
         self.line = line
         self.found = found
         self.path = path
+        self.csv_dict = {
+            "Filename": basename(self.path),
+            "Line number": str(self.line_no),
+            "Line": self.line,
+            "Found": "|".join(self.keywords),
+            "Status": "",
+            "Walkthrough": "",
+            "Full path": self.path
+        }
 
     @property
     def keywords(self):
         """Returns a list of unique keywords found in result line."""
         return list(set([x[1] for x in self.found]))
+
+    @property
+    def csv_keys(self):
+        """Returns the list of keys in a CSV line."""
+        return CSV_TAG.join(self.csv_dict.keys())
+    @property
+    def csv(self):
+        """Returns the result as CSV line."""
+        return CSV_TAG.join(list(self.csv_dict.values()))
 
     def highlight(self) -> str:
         """Change color for all keywords found in line."""
@@ -381,8 +400,9 @@ class Result(object):
             if start > idx:
                 continue
             hlstr.append(self.line[start:idx])
-            hlstr.append(colored(self.line[idx:idx+len(keyword)], "red", attrs=["bold"]))
-            start = idx + len(keyword)
+            end_of_word = len(keyword) # May be improved later
+            hlstr.append(colored(self.line[idx:idx+end_of_word], "red", attrs=["bold"]))
+            start = idx + end_of_word
         hlstr.append(self.line[start:len(self.line)])
         return "".join(hlstr)
 
@@ -546,19 +566,19 @@ RESULTS, STATS = search(PATH)
 
 VERBOSE("{0:-^69}".format(" Output "))
 
-if OPTIONS.csv:
-    raise NotImplementedError("Option: Output as CSV.")
+# CSV OUTPUT MODE
+if OPTIONS.csv and len(RESULTS):
+    print(RESULTS[0].csv_keys)
+    for result in RESULTS:
+        print(result.csv)
 if OPTIONS.file:
     raise NotImplementedError("Option: Export to file.")
 
-# All modes print stat at the end.
-# When in mode "stat" we just don't print results details.
-if not OPTIONS.stat:
+# REGULAR OUTPUT MODE
+if not OPTIONS.stat and not OPTIONS.csv:
     for result in RESULTS:
         print(result)
 
-if OPTIONS.stat:
-    raise NotImplementedError("Option: Output stats about megagrep results.")
-
+# STAT OUTPUT MODE (printed to stdout anyway, at least for now)
 print("{0:-^79}".format(" Summary "))
 print(STATS)
