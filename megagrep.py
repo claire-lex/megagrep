@@ -135,6 +135,26 @@ def CHECKFILE(filename: str, force_file=False) -> bool:
         return False
     return True
 
+#-----------------------------------------------------------------------------#
+# Result output                                                               #
+#-----------------------------------------------------------------------------#
+
+def PRINT(message: str, out: str=None) -> None:
+    """Print message to standard output and to a file if option set.
+    If TERMCOLOR is installed, the message will be printed with color codes
+    to stdout, and without color codes to file.
+    """
+    print(message)
+    if out:
+        try:
+            if isinstance(message, Result):
+                message = message.result
+            with open(out, "a") as fd:
+                fd.write(str(message)+"\n")
+        except IOError:
+            # Megagrep continues but will not save results to file.
+            ERROR("Cannot write to file {0}".format(OUTPUT_FILE))
+
 ###############################################################################
 # OPTIONS                                                                     #
 ###############################################################################
@@ -380,7 +400,12 @@ class Result(object):
     def keywords(self):
         """Returns a list of unique keywords found in result line."""
         return list(set([x[1] for x in self.found]))
-
+    @property
+    def result(self):
+        """Returns the result as a regular string."""
+        loc = "{0}:{1}".format(self.path, self.line_no)
+        found = ", ".join(self.keywords)
+        return "{0}: {1} ({2})".format(loc, self.line, found)
     @property
     def csv_keys(self):
         """Returns the list of keys in a CSV line."""
@@ -413,7 +438,7 @@ class Result(object):
         if IS_TERMCOLOR:
             return "{0}: {1} ({2})".format(colored(loc, "cyan"), self.highlight(),
                                            colored(found, "magenta"))
-        return "{0}: {1} {2}".format(loc, self.line, found)
+        return self.result
 
 #-----------------------------------------------------------------------------#
 # Stats object                                                                #
@@ -566,19 +591,30 @@ RESULTS, STATS = search(PATH)
 
 VERBOSE("{0:-^69}".format(" Output "))
 
+# FILE OUTPUT MODE
+OUTPUT_FILE=None
+if OPTIONS.file:
+    if CHECKFILE(OPTIONS.file): # File exists
+        WARNING("File {0} cannot be opened for writing.".format(OPTIONS.file))
+        WARNING("If the file already exists, Megagrep will not overwrite it.")
+    else:
+        OUTPUT_FILE = realpath(OPTIONS.file)
+
 # CSV OUTPUT MODE
 if OPTIONS.csv and len(RESULTS):
     print(RESULTS[0].csv_keys)
     for result in RESULTS:
-        print(result.csv)
-if OPTIONS.file:
-    raise NotImplementedError("Option: Export to file.")
+        PRINT(result.csv, OUTPUT_FILE)
 
 # REGULAR OUTPUT MODE
 if not OPTIONS.stat and not OPTIONS.csv:
     for result in RESULTS:
-        print(result)
+        PRINT(result, OUTPUT_FILE)
 
 # STAT OUTPUT MODE (printed to stdout anyway, at least for now)
 print("{0:-^79}".format(" Summary "))
-print(STATS)
+PRINT(STATS, OUTPUT_FILE)
+
+if OUTPUT_FILE:
+    print("{0:-^79}".format(" Results written to file "))
+    print("{0: ^79}".format(OUTPUT_FILE))

@@ -13,6 +13,8 @@ find vulnerabilities), not vulnerabilities directly.
 If you want a grep-based static analysis tool (for vulnerability research), you
 can check [Graudit](https://github.com/wireghoul/graudit).
 
+![GitHub](https://img.shields.io/github/license/claire-lex/megagrep)
+
 Getting Started
 ---------------
 
@@ -40,12 +42,12 @@ So far, only the basic scan based on keywords with output on terminal works.
 
 Coming soon:
 
-* Save output to file
 * "Stat" mode: Only display statistics about megagrep results.
 * "Comment" mode: Extract comments from source files.
 * "String" mode: Look for strings in source files.
 * Add direct regex support in dictionaries with prefix `regex:`
 * "Extended" output mode, with previous and next line printed
+* Directory tree analysis (find interesting source files in tree)
 
 Usage
 -----
