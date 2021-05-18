@@ -6,8 +6,9 @@
 # pylint: disable=invalid-name
 
 """
-usage: megagrep.py [-h] [-v] [-s] [-A] [-K] [-S] [-C] [-i files)] [-x file(s)]
-                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-f filename]
+usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-i files)] [-x file(s)]
+                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-e]
+                   [-f filename]
                    [path]
 
 Megagrep helps beginning a code review by looking at keywords using "grep".
@@ -26,7 +27,6 @@ optional arguments:
                         mode).
   -S, --stat            Give only statistics about the code (rely on other
                         modes).
-  -C, --comment         Search comments in the code.
   -i file(s), --include file(s)
                         Files to include in search (ex: *.java).
   -x file(s), --exclude file(s)
@@ -38,25 +38,47 @@ optional arguments:
   -l list(s), --list list(s)
                         Use specific list from dictionary file(s).
   -c, --csv             Output in CSV format (default is colored ASCII).
+  -e, --extended        Print extended output with previous and next lines.
   -f filename, --file filename
                         Output to file.
 """
 
 from os import access, R_OK, getcwd, walk
-from os.path import sep, dirname, join, realpath, exists, isfile
-from textwrap import fill
+from os.path import sep, dirname, join, realpath, relpath, exists, isfile, basename
+from textwrap import fill, shorten
 from argparse import ArgumentParser
 from importlib.util import find_spec
-from re import finditer, IGNORECASE, compile as re_compile
+from re import finditer, IGNORECASE
+from re import compile as re_compile, search as re_search, escape as re_escape
 
 ###############################################################################
 # CONFIGURATION                                                               #
 ###############################################################################
 
-DEFAULT_DICTIONARY = join("dicts", "global.mg")
-DEFAULT_EXCLUDE = ("*.min.js,*.css")
+#--- Dictionary --------------------------------------------------------------#
+
+# Default dictionary is dict/global.mg in megagrep.py's directory
+DEFAULT_DICTIONARY = join(dirname(realpath(__file__)), join("dicts", "global.mg"))
+# Comment tag set in dictionary files. Everything after this tag in a line is ignored.
 COMMENT_TAG = "#"
+# Category header in dictionary files. Currently between brackets: [category]
 LIST_REGEX = re_compile(r"^\[([\w\-\_\+]*)\]$")
+
+#--- File handling -----------------------------------------------------------#
+
+# Default files not to read
+DEFAULT_EXCLUDE = ("*.min.js,*.css")
+
+#--- Output ------------------------------------------------------------------#
+
+# Separator between columns for CSV output
+CSV_TAG = ","
+# Replacement separator to concatenate list in CSV output. Must not be CSV_TAG.
+REPLACECOMMA_CSV_TAG = "|"
+# Maximum length of line to output, the rest is truncated with [...] after.
+MAX_LEN = 200
+# Default value for Top X in stat mode
+TOP_VALUE = 10
 
 ###############################################################################
 # GLOBAL FUNCTIONS                                                            #
@@ -113,18 +135,6 @@ def ERROR(message: str) -> None:
 # File management                                                             #
 #-----------------------------------------------------------------------------#
 
-def REALPATH(filename: str) -> str:
-    """Returns the absolute path of a file using ``os.path`` library.
-
-    If we only have the filename, the absolute path points to megagrep's source
-    directory instead of current working directory.
-    """
-    if not filename:
-        return None
-    if sep not in filename:
-        filename = join(dirname(realpath(__file__)), filename)
-    return realpath(filename)
-
 def CHECKFILE(filename: str, force_file=False) -> bool:
     """Check if source file exists. Returns True or False"""
     fullarg = realpath(filename)
@@ -133,6 +143,37 @@ def CHECKFILE(filename: str, force_file=False) -> bool:
     if force_file and not isfile(fullarg):
         return False
     return True
+
+#-----------------------------------------------------------------------------#
+# Result output                                                               #
+#-----------------------------------------------------------------------------#
+
+def PRINT(message: str, out: str=None) -> None:
+    """Print message to standard output and to a file if option set.
+    If TERMCOLOR is installed, the message will be printed with color codes
+    to stdout, and without color codes to file.
+    """
+    print(message)
+    if out:
+        try:
+            if isinstance(message, Result):
+                message = message.result
+            with open(out, "a") as fd:
+                fd.write(str(message)+"\n")
+        except IOError:
+            # Megagrep continues but will not save results to file.
+            ERROR("Cannot write to file {0}".format(OUTPUT_FILE))
+
+def PRINT_TOP(summary: list, top: int=TOP_VALUE, out: str=None):
+    """Print top with values from summary to stdout and to a file if option set.
+    Summary is a list of tuples (number of occurrences, values).
+    """
+    ct = 1
+    for occur, value in summary:
+        PRINT("{0: >3}. {1} ({2})".format(ct, value, occur), out)
+        if ct == top:
+            break
+        ct += 1
 
 ###############################################################################
 # OPTIONS                                                                     #
@@ -155,6 +196,7 @@ D_WORD = None
 D_DICT = None
 D_LIST = None
 D_CSV = False
+D_EXTENDED = False
 D_FILE = None
 
 # Help messages
@@ -173,6 +215,7 @@ H_WORD = "Search for specific word(s)."
 H_DICT = "Use other dictionary file(s)."
 H_LIST = "Use specific list from dictionary file(s)."
 H_CSV = "Output in CSV format (default is colored ASCII)."
+H_EXTENDED = "Print extended output with previous and next lines."
 H_FILE = "Output to file."
 
 # Meta text
@@ -194,8 +237,8 @@ OPTS_DICT = (
     # Mode
     ("-K", "--keyword", H_KEYWORD, D_KEYWORD, None),
     ("-S", "--stat", H_STAT, D_STAT, None),
-    ("-C", "--comment", H_COMMENT, D_COMMENT, None),
-    ("-T", "--strings", H_STRINGS, D_STRINGS, None),
+    # ("-C", "--comment", H_COMMENT, D_COMMENT, None),
+    # ("-T", "--strings", H_STRINGS, D_STRINGS, None),
     # Input
     ("-i", "--include", H_INCLUDE, D_INCLUDE, M_FILE),
     ("-x", "--exclude", H_EXCLUDE, D_EXCLUDE, M_FILE),
@@ -205,6 +248,7 @@ OPTS_DICT = (
     ("-l", "--list", H_LIST, D_LIST, M_LIST),
     # Output
     ("-c", "--csv", H_CSV, D_CSV, None),
+    ("-e", "--extended", H_EXTENDED, D_EXTENDED, None),
     ("-f", "--file", H_FILE, D_FILE, M_NAME)
 )
 
@@ -279,10 +323,9 @@ def init_keywords() -> dict:
     Using both ``word`` and ``dict`` combines both.
     """
     if OPTIONS.sensitive:
-        REGEX = lambda x: re_compile(x.replace(".", r"\.").replace("*", ".*"))
+        REGEX = lambda x: re_compile(re_escape(x).replace("*", r".*"))
     else:
-        REGEX = lambda x: re_compile(x.replace(".", r"\.").replace("*", ".*"),
-                                     IGNORECASE)
+        REGEX = lambda x: re_compile(re_escape(x).replace("*", r".*"), IGNORECASE)
     keywords = []
     k_regex = [] # keywords compiled regex
     categories = []
@@ -302,7 +345,7 @@ def init_keywords() -> dict:
             k_regex += [REGEX(x) for x in keywords]
     # DEFAULT DICTIONARY
     if not keywords:
-        keywords += parse_dict(REALPATH(DEFAULT_DICTIONARY), categories)
+        keywords += parse_dict(DEFAULT_DICTIONARY, categories)
         k_regex += [REGEX(x) for x in keywords]
     return keywords, k_regex
 
@@ -360,16 +403,63 @@ class Result(object):
     :param path: Full path to the file containing the result line.
     """
     def __init__(self, line_no: int=0, line: str="", found: object=None,
-                 path: str="") -> None:
+                 path: str="", before: str="", after: str="") -> None:
         self.line_no = line_no
         self.line = line
         self.found = found
         self.path = path
+        self.csv_dict = {
+            "Filename": basename(self.path),
+            "Line number": str(self.line_no),
+            "Line": self.line,
+            "Found": REPLACECOMMA_CSV_TAG.join(self.keywords),
+            "Status": "",
+            "Walkthrough": "",
+            "Full path": self.path
+        }
+        # FOR EXTENDED MODE ONLY
+        self.before = before
+        self.after = after
 
     @property
     def keywords(self):
         """Returns a list of unique keywords found in result line."""
         return list(set([x[1] for x in self.found]))
+    @property
+    def all_keywords(self):
+        """Returns the list of keywords with all occurrences found in line."""
+        return [x[1] for x in self.found]
+    @property
+    def result(self):
+        """Returns the result as a regular string with absolute path.
+        This property is used to write results to files.
+        """
+        loc = "{0}:{1}".format(self.path, self.line_no)
+        line = shorten(self.line, width=MAX_LEN)
+        found = ", ".join(self.keywords)
+        return "{0}: {1} ({2})".format(loc, line, found)
+    @property
+    def csv_keys(self):
+        """Returns the list of keys in a CSV line."""
+        return CSV_TAG.join(self.csv_dict.keys())
+    @property
+    def csv(self):
+        """Returns the result as CSV line."""
+        return CSV_TAG.join(list(self.csv_dict.values()))
+    @property
+    def relpath(self):
+        """Returns the relative path instead of absolute one."""
+        return relpath(self.path)
+    @property
+    def previous_line(self):
+        """Returns the previous line with output format."""
+        before = shorten(self.before, width=MAX_LEN)
+        return "{0}:{1}: {2}".format(self.relpath, self.line_no-1, before)
+    @property
+    def next_line(self):
+        """Returns the next line with output format."""
+        after = shorten(self.after, width=MAX_LEN)
+        return "{0}:{1}: {2}".format(self.relpath, self.line_no+1, after)
 
     def highlight(self) -> str:
         """Change color for all keywords found in line."""
@@ -381,19 +471,20 @@ class Result(object):
             if start > idx:
                 continue
             hlstr.append(self.line[start:idx])
-            hlstr.append(colored(self.line[idx:idx+len(keyword)], "red", attrs=["bold"]))
-            start = idx + len(keyword)
+            end_of_word = len(keyword) # May be improved later
+            hlstr.append(colored(self.line[idx:idx+end_of_word], "red", attrs=["bold"]))
+            start = idx + end_of_word
         hlstr.append(self.line[start:len(self.line)])
         return "".join(hlstr)
 
     def __str__(self):
         """Returns the result as a string with all megagrep info."""
-        loc = "{0}:{1}".format(self.path, self.line_no)
+        loc = "{0}:{1}".format(self.relpath, self.line_no)
+        line = shorten(self.highlight(), width=MAX_LEN)
         found = ", ".join(self.keywords)
         if IS_TERMCOLOR:
-            return "{0}: {1} ({2})".format(colored(loc, "cyan"), self.highlight(),
-                                           colored(found, "magenta"))
-        return "{0}: {1} {2}".format(loc, self.line, found)
+            return "{0}: {1} ({2})".format(colored(loc, "cyan"), line, colored(found, "magenta"))
+        return self.result
 
 #-----------------------------------------------------------------------------#
 # Stats object                                                                #
@@ -451,12 +542,12 @@ def code_generator(filename: str, stats: Stats):
       [(2, passwd), (10, sql), (36, passwd)]
     """
     try:
-        VERBOSE("Scanning file {0}...".format(filename))
         with open(filename, 'r') as fd:
-            stats.nb_file += 1
-            ct = 1
-            for line in fd:
-                stats.nb_line += 1
+            ct = -1
+            VERBOSE("Scanning file {0}...".format(filename))
+            lines = fd.readlines()
+            for line in lines:
+                ct += 1
                 line = line.strip()
                 if not len(line):
                     continue
@@ -471,10 +562,16 @@ def code_generator(filename: str, stats: Stats):
                 # Time to yield if keyword found
                 if len(found):
                     stats.nb_resline += 1
-                    yield ct, line, sorted(found)
-                ct += 1
+                    before = lines[ct-1].strip() if ct > 0 else ""
+                    after = lines[ct+1].strip() if ct < len(lines)-1 else ""
+                    # Ct start at 0, we increment for actual line number starting at 1
+                    yield ct+1, line, sorted(found), before, after
+                # STAT; Number of lines read
+                stats.nb_line += 1
+            # STAT: Number of files read
+            stats.nb_file += 1
     except (IOError, UnicodeDecodeError):
-        WARNING("Error while parsing file {0}.".format(filename))
+        VERBOSE("Error while parsing file {0}.".format(filename))
 
 def comment_generator(filename: str, stats: Stats):
     """TODO"""
@@ -507,9 +604,32 @@ def search(basepath: str) -> list:
             # Apply include and exclude list on item name
             if is_included(item):
                 item_path = join(path, item)
-                for nb, line, content in generator(item_path, stats):
-                    results.append(Result(nb, line, content, item_path))
+                for nb, line, content, before, after in generator(item_path, stats):
+                    results.append(Result(nb, line, content, item_path, before,
+                                          after))
     return results, stats
+
+###############################################################################
+# ANALYSIS                                                                    #
+###############################################################################
+
+def top_counter(full_list: list) -> list:
+    """Returns list of tuple (number of occurrences, value) from full_list."""
+    unique = set(full_list)
+    summary = []
+    for value in unique:
+        summary.append((full_list.count(value), value))
+    return sorted(summary, reverse=True)
+
+def top_keywords(results: list):
+    all_keywords = []
+    for result in results:
+        all_keywords += result.all_keywords
+    return top_counter(all_keywords)
+
+def top_files(results: list):
+    all_files = [x.path for x in results]
+    return top_counter(all_files)
 
 ###############################################################################
 # RUN                                                                         #
@@ -536,29 +656,54 @@ VERBOSE("Path to scan (recursive): {0}".format(PATH))
 INCLUDE, EXCLUDE = init_include_exclude()
 VERBOSE("File included: {0}".format(OPTIONS.include))
 VERBOSE("File excluded: {0}".format(OPTIONS.exclude))
-VERBOSE("{0:-^69}".format(" Start scan "))
+# FILE OUTPUT MODE
+OUTPUT_FILE=None
+if OPTIONS.file:
+    if CHECKFILE(OPTIONS.file): # File exists
+        WARNING("File {0} cannot be opened for writing.".format(OPTIONS.file))
+        WARNING("If the file already exists, Megagrep will not overwrite it.")
+    else:
+        OUTPUT_FILE = realpath(OPTIONS.file)
+        VERBOSE("Output will be written to file: {0}".format(OUTPUT_FILE))
 
 #--- Search -------------------------------------------------------------------#
 
+VERBOSE("{0:-^69}".format(" Start scan "))
 RESULTS, STATS = search(PATH)
 
 #--- Output -------------------------------------------------------------------#
 
 VERBOSE("{0:-^69}".format(" Output "))
 
-if OPTIONS.csv:
-    raise NotImplementedError("Option: Output as CSV.")
-if OPTIONS.file:
-    raise NotImplementedError("Option: Export to file.")
-
-# All modes print stat at the end.
-# When in mode "stat" we just don't print results details.
-if not OPTIONS.stat:
+# CSV OUTPUT MODE
+if OPTIONS.csv and len(RESULTS):
+    print(RESULTS[0].csv_keys)
     for result in RESULTS:
-        print(result)
+        PRINT(result.csv, OUTPUT_FILE)
 
-if OPTIONS.stat:
-    raise NotImplementedError("Option: Output stats about megagrep results.")
+# EXTENDED OUTPUT MODE
+elif OPTIONS.extended:
+    for result in RESULTS:
+        print("{0:-^79}".format(""))
+        PRINT(result.previous_line, OUTPUT_FILE)
+        PRINT(result, OUTPUT_FILE)
+        PRINT(result.next_line, OUTPUT_FILE)
 
-print("{0:-^79}".format(" Summary "))
-print(STATS)
+# STAT OUTPUT MODE
+elif OPTIONS.stat:
+    PRINT("{0:-^79}".format(" Most frequent keywords "), OUTPUT_FILE)
+    PRINT_TOP(top_keywords(RESULTS), TOP_VALUE, OUTPUT_FILE)
+    PRINT("{0:-^79}".format(" Files with most results "), OUTPUT_FILE)
+    PRINT_TOP(top_files(RESULTS), TOP_VALUE, OUTPUT_FILE)
+
+# REGULAR OUTPUT MODE
+else:
+    for result in RESULTS:
+        PRINT(result, OUTPUT_FILE)
+
+PRINT("{0:-^79}".format(" Summary "), OUTPUT_FILE)
+PRINT(STATS, OUTPUT_FILE)
+
+if OUTPUT_FILE:
+    print("{0:-^79}".format(" Results written to file "))
+    print("{0: ^79}".format(OUTPUT_FILE))
