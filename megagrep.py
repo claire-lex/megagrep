@@ -47,7 +47,7 @@ optional arguments:
 
 from os import access, R_OK, getcwd, walk
 from os.path import sep, dirname, join, realpath, relpath, exists, isfile, basename
-from textwrap import fill
+from textwrap import fill, shorten
 from argparse import ArgumentParser
 from importlib.util import find_spec
 from re import finditer, IGNORECASE, compile as re_compile, search as re_search
@@ -56,11 +56,28 @@ from re import finditer, IGNORECASE, compile as re_compile, search as re_search
 # CONFIGURATION                                                               #
 ###############################################################################
 
-DEFAULT_DICTIONARY = join("dicts", "global.mg")
-DEFAULT_EXCLUDE = ("*.min.js,*.css")
+#--- Dictionary --------------------------------------------------------------#
+
+# Default dictionary is dict/global.mg in megagrep.py's directory
+DEFAULT_DICTIONARY = join(dirname(realpath(__file__)), join("dicts", "global.mg"))
+# Comment tag set in dictionary files. Everything after this tag in a line is ignored.
 COMMENT_TAG = "#"
-CSV_TAG = ","
+# Category header in dictionary files. Currently between brackets: [category]
 LIST_REGEX = re_compile(r"^\[([\w\-\_\+]*)\]$")
+
+#--- File handling -----------------------------------------------------------#
+
+# Default files not to read
+DEFAULT_EXCLUDE = ("*.min.js,*.css")
+
+#--- Output ------------------------------------------------------------------#
+
+# Separator between columns for CSV output
+CSV_TAG = ","
+# Replacement separator to concatenate list in CSV output. Must not be CSV_TAG.
+REPLACECOMMA_CSV_TAG = "|"
+# Maximum length of line to output, the rest is truncated with [...] after.
+MAX_LEN = 200
 
 ###############################################################################
 # GLOBAL FUNCTIONS                                                            #
@@ -116,18 +133,6 @@ def ERROR(message: str) -> None:
 #-----------------------------------------------------------------------------#
 # File management                                                             #
 #-----------------------------------------------------------------------------#
-
-def REALPATH(filename: str) -> str:
-    """Returns the absolute path of a file using ``os.path`` library.
-
-    If we only have the filename, the absolute path points to megagrep's source
-    directory instead of current working directory.
-    """
-    if not filename:
-        return None
-    if sep not in filename:
-        filename = join(dirname(realpath(__file__)), filename)
-    return realpath(filename)
 
 def CHECKFILE(filename: str, force_file=False) -> bool:
     """Check if source file exists. Returns True or False"""
@@ -329,7 +334,7 @@ def init_keywords() -> dict:
             k_regex += [REGEX(x) for x in keywords]
     # DEFAULT DICTIONARY
     if not keywords:
-        keywords += parse_dict(REALPATH(DEFAULT_DICTIONARY), categories)
+        keywords += parse_dict(DEFAULT_DICTIONARY, categories)
         k_regex += [REGEX(x) for x in keywords]
     return keywords, k_regex
 
@@ -396,12 +401,12 @@ class Result(object):
             "Filename": basename(self.path),
             "Line number": str(self.line_no),
             "Line": self.line,
-            "Found": "|".join(self.keywords),
+            "Found": REPLACECOMMA_CSV_TAG.join(self.keywords),
             "Status": "",
             "Walkthrough": "",
             "Full path": self.path
         }
-        # FOR EXTENDED MODE
+        # FOR EXTENDED MODE ONLY
         self.before = before
         self.after = after
 
@@ -415,8 +420,9 @@ class Result(object):
         This property is used to write results to files.
         """
         loc = "{0}:{1}".format(self.path, self.line_no)
+        line = shorten(self.line, width=MAX_LEN)
         found = ", ".join(self.keywords)
-        return "{0}: {1} ({2})".format(loc, self.line, found)
+        return "{0}: {1} ({2})".format(loc, line, found)
     @property
     def csv_keys(self):
         """Returns the list of keys in a CSV line."""
@@ -432,11 +438,13 @@ class Result(object):
     @property
     def previous_line(self):
         """Returns the previous line with output format."""
-        return "{0}:{1}: {2}".format(self.path, self.line_no-1, self.before)
+        before = shorten(self.before, width=MAX_LEN)
+        return "{0}:{1}: {2}".format(self.path, self.line_no-1, before)
     @property
     def next_line(self):
         """Returns the next line with output format."""
-        return "{0}:{1}: {2}".format(self.path, self.line_no+1, self.after)
+        after = shorten(self.after, width=MAX_LEN)
+        return "{0}:{1}: {2}".format(self.path, self.line_no+1, after)
 
     def highlight(self) -> str:
         """Change color for all keywords found in line."""
@@ -457,10 +465,10 @@ class Result(object):
     def __str__(self):
         """Returns the result as a string with all megagrep info."""
         loc = "{0}:{1}".format(self.relpath, self.line_no)
+        line = shorten(self.highlight(), width=MAX_LEN)
         found = ", ".join(self.keywords)
         if IS_TERMCOLOR:
-            return "{0}: {1} ({2})".format(colored(loc, "cyan"), self.highlight(),
-                                           colored(found, "magenta"))
+            return "{0}: {1} ({2})".format(colored(loc, "cyan"), line, colored(found, "magenta"))
         return self.result
 
 #-----------------------------------------------------------------------------#
@@ -521,12 +529,10 @@ def code_generator(filename: str, stats: Stats):
     try:
         VERBOSE("Scanning file {0}...".format(filename))
         with open(filename, 'r') as fd:
-            stats.nb_file += 1
             ct = -1
             lines = fd.readlines()
             for line in lines:
                 ct += 1
-                stats.nb_line += 1
                 line = line.strip()
                 if not len(line):
                     continue
@@ -545,8 +551,12 @@ def code_generator(filename: str, stats: Stats):
                     after = lines[ct+1].strip() if ct < len(lines)-1 else ""
                     # Ct start at 0, we increment for actual line number starting at 1
                     yield ct+1, line, sorted(found), before, after
+                # STAT; Number of lines read
+                stats.nb_line += 1
+            # STAT: Number of files read
+            stats.nb_file += 1
     except (IOError, UnicodeDecodeError):
-        WARNING("Error while parsing file {0}.".format(filename))
+        VERBOSE("Error while parsing file {0}.".format(filename))
 
 def comment_generator(filename: str, stats: Stats):
     """TODO"""
