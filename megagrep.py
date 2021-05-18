@@ -6,7 +6,7 @@
 # pylint: disable=invalid-name
 
 """
-usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-C] [-T] [-i files)] [-x file(s)]
+usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-i files)] [-x file(s)]
                    [-w word(s)] [-d file(s)] [-l list(s] [-c] [-e]
                    [-f filename]
                    [path]
@@ -27,8 +27,6 @@ optional arguments:
                         mode).
   -S, --stat            Give only statistics about the code (rely on other
                         modes).
-  -C, --comment         Search comments in the code.
-  -T, --strings         Search strings in the code.
   -i file(s), --include file(s)
                         Files to include in search (ex: *.java).
   -x file(s), --exclude file(s)
@@ -50,7 +48,9 @@ from os.path import sep, dirname, join, realpath, relpath, exists, isfile, basen
 from textwrap import fill, shorten
 from argparse import ArgumentParser
 from importlib.util import find_spec
-from re import finditer, IGNORECASE, compile as re_compile, search as re_search
+from re import finditer, IGNORECASE
+from re import compile as re_compile, search as re_search, escape as re_escape
+from sre_constants import error as sre_constants_error
 
 ###############################################################################
 # CONFIGURATION                                                               #
@@ -238,8 +238,8 @@ OPTS_DICT = (
     # Mode
     ("-K", "--keyword", H_KEYWORD, D_KEYWORD, None),
     ("-S", "--stat", H_STAT, D_STAT, None),
-    ("-C", "--comment", H_COMMENT, D_COMMENT, None),
-    ("-T", "--strings", H_STRINGS, D_STRINGS, None),
+    # ("-C", "--comment", H_COMMENT, D_COMMENT, None),
+    # ("-T", "--strings", H_STRINGS, D_STRINGS, None),
     # Input
     ("-i", "--include", H_INCLUDE, D_INCLUDE, M_FILE),
     ("-x", "--exclude", H_EXCLUDE, D_EXCLUDE, M_FILE),
@@ -324,10 +324,9 @@ def init_keywords() -> dict:
     Using both ``word`` and ``dict`` combines both.
     """
     if OPTIONS.sensitive:
-        REGEX = lambda x: re_compile(x.replace(".", r"\.").replace("*", ".*"))
+        REGEX = lambda x: re_compile(re_escape(x).replace("*", r".*"))
     else:
-        REGEX = lambda x: re_compile(x.replace(".", r"\.").replace("*", ".*"),
-                                     IGNORECASE)
+        REGEX = lambda x: re_compile(re_escape(x).replace("*", r".*"), IGNORECASE)
     keywords = []
     k_regex = [] # keywords compiled regex
     categories = []
@@ -337,14 +336,20 @@ def init_keywords() -> dict:
         VERBOSE("Using keywords from lists: {0}".format(", ".join(categories)))
     # OPTION WORD
     if OPTIONS.word:
-        keywords += OPTIONS.word.split(",")
-        k_regex += [REGEX(x) for x in keywords]
+        try:
+            keywords += OPTIONS.word.split(",")
+            k_regex += [REGEX(x) for x in keywords]
+        except sre_constants_error:
+            ERROR("Words cannot be used ({0}).".format(OPTIONS.word))
     # OPTION DICT
     if OPTIONS.dict:
         dictionaries = OPTIONS.dict.split(",")
         for dictfile in dictionaries:
-            keywords += parse_dict(dictfile, categories)
-            k_regex += [REGEX(x) for x in keywords]
+            try:
+                keywords += parse_dict(dictfile, categories)
+                k_regex += [REGEX(x) for x in keywords]
+            except sre_constants_error:
+                ERROR("Dictionary cannot be parsed ({0}).".format(dictfile))
     # DEFAULT DICTIONARY
     if not keywords:
         keywords += parse_dict(DEFAULT_DICTIONARY, categories)
@@ -456,12 +461,12 @@ class Result(object):
     def previous_line(self):
         """Returns the previous line with output format."""
         before = shorten(self.before, width=MAX_LEN)
-        return "{0}:{1}: {2}".format(self.path, self.line_no-1, before)
+        return "{0}:{1}: {2}".format(self.relpath, self.line_no-1, before)
     @property
     def next_line(self):
         """Returns the next line with output format."""
         after = shorten(self.after, width=MAX_LEN)
-        return "{0}:{1}: {2}".format(self.path, self.line_no+1, after)
+        return "{0}:{1}: {2}".format(self.relpath, self.line_no+1, after)
 
     def highlight(self) -> str:
         """Change color for all keywords found in line."""

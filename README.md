@@ -30,10 +30,22 @@ https://github.com/claire-lex/megagrep
 pip install -r requirements.txt
 ```
 
-Run with standard options and dictionary on a directory:
+Run with standard options and default dictionary on a directory:
 ```
 python megagrep.py /path/to/my/code
 ```
+
+Store results to a file:
+```
+python megagrep.py my_directory -f megagrep.out
+```
+
+Print help:
+```
+python megagrep.py -h
+```
+
+**More usage examples below!**
 
 Status
 ------
@@ -51,59 +63,69 @@ Coming soon:
 Usage
 -----
 
+### Run scans
+
+Default scan (one line per result, with color if termcolor is installed):
 ```
-$> python megagrep.py -h
--------------------------------------------------------------------------------
-                  ,__ __                                      
-                 /|  |  |                                     
-                  |  |  |   _   __,  __,   __,  ,_    _    _  
-                  |  |  |  |/  /  | /  |  /  | /  |  |/  |/ \_
-                  |  |  |_/|__/\_/|/\_/|_/\_/|/   |_/|__/|__/ 
-                                 /|         /|          /|    
-                                 \|         \|          \|    
-
--------------------------------------------------------------------------------
-usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-C] [-T] [-i files)] [-x file(s)]
-                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-e]
-                   [-f filename]
-                   [path]
-
-Megagrep helps beginning a code review by looking at keywords using "grep".
-This is not a static analysis tool, it just searches for places in the code
-that require to be investigated manually.
-
-positional arguments:
-  path                  Path to files to (mega)grep.
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -v, --verbose         Verbose mode.
-  -s, --sensitive       Enable case-sensitive mode (default is case
-                        insensitive).
-  -K, --keyword         Search by keywords from a dictionary file (default
-                        mode).
-  -S, --stat            Give only statistics about the code (rely on other
-                        modes).
-  -C, --comment         Search comments in the code.
-  -T, --strings         Search strings in the code.
-  -i file(s), --include file(s)
-                        Files to include in search (ex: *.java).
-  -x file(s), --exclude file(s)
-                        Files to exclude from search (ex: *.min.js).
-  -w word(s), --word word(s)
-                        Search for specific word(s).
-  -d file(s), --dict file(s)
-                        Use other dictionary file(s).
-  -l list(s), --list list(s)
-                        Use specific list from dictionary file(s).
-  -c, --csv             Output in CSV format (default is colored ASCII).
-  -e, --extended        Print extended output with previous and next lines.
-  -f filename, --file filename
-                        Output to file.
+$> python megagrep.py .
+[...]
+classes/Login.php:51: public static function checkAuth($bank_id, $password) { (auth*, passw*d)
+classes/Login.php:52: $conn = new PDO(DB_DSN, DB_USERNAME, DB_PASSWORD); (passw*d)
+classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id; (sql)
+classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';"; (sql, md5, passw*d)
+classes/Login.php:56: $st = $conn->prepare($sql); (sql)
+classes/Login.php:57: $st->execute(); (exec)
+[...]
 ```
 
-Use/write dictionaries
-----------------------
+Extended scan (print lines before and after matching line):
+```
+$> python megagrep.py -e .
+[...]
+-------------------------------------------------------------------------------
+classes/Login.php:52: $conn = new PDO(DB_DSN, DB_USERNAME, DB_PASSWORD);
+classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id; (sql)
+classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';";
+-------------------------------------------------------------------------------
+classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id;
+classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';"; (md5, passw*d, sql)
+classes/Login.php:55: 
+-------------------------------------------------------------------------------
+classes/Login.php:55: 
+classes/Login.php:56: $st = $conn->prepare($sql); (sql)
+classes/Login.php:57: $st->execute();
+-------------------------------------------------------------------------------
+[...]
+```
+
+Stat scan (only display global informaiton in scan):
+```
+[...]
+--------------------------- Most frequent keywords ----------------------------
+  1. login (21)
+  2. passw*d (11)
+  3. session (9)
+  4. sql (8)
+  5. auth* (4)
+  6. upload (3)
+  7. sha*1 (3)
+  8. download (3)
+  9. md5 (2)
+ 10. exec (2)
+--------------------------- Files with most results ---------------------------
+  1. DUMMY_PATH/index.php (20)
+  2. DUMMY_PATH/classes/Login.php (14)
+  3. DUMMY_PATH/templates/fonts/fontawesome-webfont.svg (12)
+  4. DUMMY_PATH/templates/loginform.php (8)
+  5. DUMMY_PATH/config.php (3)
+  6. DUMMY_PATH/templates/logged.php (1)
+  7. DUMMY_PATH/templates/include/header.php (1)
+  8. DUMMY_PATH/templates/edit.php (1)
+[...]
+```
+
+### Use/write dictionaries
+
 
 You can use default dictionaries in ``dicts/`` and also use your own:
 
