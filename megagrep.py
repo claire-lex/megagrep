@@ -46,7 +46,7 @@ optional arguments:
 """
 
 from os import access, R_OK, getcwd, walk
-from os.path import sep, dirname, join, realpath, exists, isfile, basename
+from os.path import sep, dirname, join, realpath, relpath, exists, isfile, basename
 from textwrap import fill
 from argparse import ArgumentParser
 from importlib.util import find_spec
@@ -411,7 +411,9 @@ class Result(object):
         return list(set([x[1] for x in self.found]))
     @property
     def result(self):
-        """Returns the result as a regular string."""
+        """Returns the result as a regular string with absolute path.
+        This property is used to write results to files.
+        """
         loc = "{0}:{1}".format(self.path, self.line_no)
         found = ", ".join(self.keywords)
         return "{0}: {1} ({2})".format(loc, self.line, found)
@@ -423,6 +425,10 @@ class Result(object):
     def csv(self):
         """Returns the result as CSV line."""
         return CSV_TAG.join(list(self.csv_dict.values()))
+    @property
+    def relpath(self):
+        """Returns the relative path instead of absolute one."""
+        return relpath(self.path)
     @property
     def previous_line(self):
         """Returns the previous line with output format."""
@@ -450,7 +456,7 @@ class Result(object):
 
     def __str__(self):
         """Returns the result as a string with all megagrep info."""
-        loc = "{0}:{1}".format(self.path, self.line_no)
+        loc = "{0}:{1}".format(self.relpath, self.line_no)
         found = ", ".join(self.keywords)
         if IS_TERMCOLOR:
             return "{0}: {1} ({2})".format(colored(loc, "cyan"), self.highlight(),

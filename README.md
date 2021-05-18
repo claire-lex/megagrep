@@ -47,7 +47,6 @@ Coming soon:
 * "String" mode: Look for strings in source files.
 * Add direct regex support in dictionaries with prefix `regex:`
 * Directory tree analysis (find interesting source files in tree)
-* Path shortener in output (because sometimes it is just too large)
 
 Usage
 -----
