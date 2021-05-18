@@ -46,8 +46,8 @@ Coming soon:
 * "Comment" mode: Extract comments from source files.
 * "String" mode: Look for strings in source files.
 * Add direct regex support in dictionaries with prefix `regex:`
-* "Extended" output mode, with previous and next line printed
 * Directory tree analysis (find interesting source files in tree)
+* Path shortener in output (because sometimes it is just too large)
 
 Usage
 -----
@@ -65,7 +65,8 @@ $> python megagrep.py -h
 
 -------------------------------------------------------------------------------
 usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-C] [-T] [-i files)] [-x file(s)]
-                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-f filename]
+                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-e]
+                   [-f filename]
                    [path]
 
 Megagrep helps beginning a code review by looking at keywords using "grep".
@@ -97,6 +98,7 @@ optional arguments:
   -l list(s), --list list(s)
                         Use specific list from dictionary file(s).
   -c, --csv             Output in CSV format (default is colored ASCII).
+  -e, --extended        Print extended output with previous and next lines.
   -f filename, --file filename
                         Output to file.
 ```

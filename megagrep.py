@@ -6,8 +6,9 @@
 # pylint: disable=invalid-name
 
 """
-usage: megagrep.py [-h] [-v] [-s] [-A] [-K] [-S] [-C] [-i files)] [-x file(s)]
-                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-f filename]
+usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-C] [-T] [-i files)] [-x file(s)]
+                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-e]
+                   [-f filename]
                    [path]
 
 Megagrep helps beginning a code review by looking at keywords using "grep".
@@ -27,6 +28,7 @@ optional arguments:
   -S, --stat            Give only statistics about the code (rely on other
                         modes).
   -C, --comment         Search comments in the code.
+  -T, --strings         Search strings in the code.
   -i file(s), --include file(s)
                         Files to include in search (ex: *.java).
   -x file(s), --exclude file(s)
@@ -38,6 +40,7 @@ optional arguments:
   -l list(s), --list list(s)
                         Use specific list from dictionary file(s).
   -c, --csv             Output in CSV format (default is colored ASCII).
+  -e, --extended        Print extended output with previous and next lines.
   -f filename, --file filename
                         Output to file.
 """
@@ -176,6 +179,7 @@ D_WORD = None
 D_DICT = None
 D_LIST = None
 D_CSV = False
+D_EXTENDED = False
 D_FILE = None
 
 # Help messages
@@ -194,6 +198,7 @@ H_WORD = "Search for specific word(s)."
 H_DICT = "Use other dictionary file(s)."
 H_LIST = "Use specific list from dictionary file(s)."
 H_CSV = "Output in CSV format (default is colored ASCII)."
+H_EXTENDED = "Print extended output with previous and next lines."
 H_FILE = "Output to file."
 
 # Meta text
@@ -226,6 +231,7 @@ OPTS_DICT = (
     ("-l", "--list", H_LIST, D_LIST, M_LIST),
     # Output
     ("-c", "--csv", H_CSV, D_CSV, None),
+    ("-e", "--extended", H_EXTENDED, D_EXTENDED, None),
     ("-f", "--file", H_FILE, D_FILE, M_NAME)
 )
 
@@ -381,7 +387,7 @@ class Result(object):
     :param path: Full path to the file containing the result line.
     """
     def __init__(self, line_no: int=0, line: str="", found: object=None,
-                 path: str="") -> None:
+                 path: str="", before: str="", after: str="") -> None:
         self.line_no = line_no
         self.line = line
         self.found = found
@@ -395,6 +401,9 @@ class Result(object):
             "Walkthrough": "",
             "Full path": self.path
         }
+        # FOR EXTENDED MODE
+        self.before = before
+        self.after = after
 
     @property
     def keywords(self):
@@ -414,6 +423,14 @@ class Result(object):
     def csv(self):
         """Returns the result as CSV line."""
         return CSV_TAG.join(list(self.csv_dict.values()))
+    @property
+    def previous_line(self):
+        """Returns the previous line with output format."""
+        return "{0}:{1}: {2}".format(self.path, self.line_no-1, self.before)
+    @property
+    def next_line(self):
+        """Returns the next line with output format."""
+        return "{0}:{1}: {2}".format(self.path, self.line_no+1, self.after)
 
     def highlight(self) -> str:
         """Change color for all keywords found in line."""
@@ -499,8 +516,10 @@ def code_generator(filename: str, stats: Stats):
         VERBOSE("Scanning file {0}...".format(filename))
         with open(filename, 'r') as fd:
             stats.nb_file += 1
-            ct = 1
-            for line in fd:
+            ct = -1
+            lines = fd.readlines()
+            for line in lines:
+                ct += 1
                 stats.nb_line += 1
                 line = line.strip()
                 if not len(line):
@@ -516,8 +535,10 @@ def code_generator(filename: str, stats: Stats):
                 # Time to yield if keyword found
                 if len(found):
                     stats.nb_resline += 1
-                    yield ct, line, sorted(found)
-                ct += 1
+                    before = lines[ct-1].strip() if ct > 0 else ""
+                    after = lines[ct+1].strip() if ct < len(lines)-1 else ""
+                    # Ct start at 0, we increment for actual line number starting at 1
+                    yield ct+1, line, sorted(found), before, after
     except (IOError, UnicodeDecodeError):
         WARNING("Error while parsing file {0}.".format(filename))
 
@@ -552,8 +573,9 @@ def search(basepath: str) -> list:
             # Apply include and exclude list on item name
             if is_included(item):
                 item_path = join(path, item)
-                for nb, line, content in generator(item_path, stats):
-                    results.append(Result(nb, line, content, item_path))
+                for nb, line, content, before, after in generator(item_path, stats):
+                    results.append(Result(nb, line, content, item_path, before,
+                                          after))
     return results, stats
 
 ###############################################################################
@@ -606,8 +628,16 @@ if OPTIONS.csv and len(RESULTS):
     for result in RESULTS:
         PRINT(result.csv, OUTPUT_FILE)
 
+# EXTENDED OUTPUT MODE
+elif OPTIONS.extended and len(RESULTS):
+    for result in RESULTS:
+        print("{0:-^79}".format(""))
+        PRINT(result.previous_line, OUTPUT_FILE)
+        PRINT(result, OUTPUT_FILE)
+        PRINT(result.next_line, OUTPUT_FILE)
+
 # REGULAR OUTPUT MODE
-if not OPTIONS.stat and not OPTIONS.csv:
+elif not OPTIONS.stat and len(RESULTS):
     for result in RESULTS:
         PRINT(result, OUTPUT_FILE)
 
