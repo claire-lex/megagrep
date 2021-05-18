@@ -50,7 +50,6 @@ from argparse import ArgumentParser
 from importlib.util import find_spec
 from re import finditer, IGNORECASE
 from re import compile as re_compile, search as re_search, escape as re_escape
-from sre_constants import error as sre_constants_error
 
 ###############################################################################
 # CONFIGURATION                                                               #
@@ -336,20 +335,14 @@ def init_keywords() -> dict:
         VERBOSE("Using keywords from lists: {0}".format(", ".join(categories)))
     # OPTION WORD
     if OPTIONS.word:
-        try:
-            keywords += OPTIONS.word.split(",")
-            k_regex += [REGEX(x) for x in keywords]
-        except sre_constants_error:
-            ERROR("Words cannot be used ({0}).".format(OPTIONS.word))
+        keywords += OPTIONS.word.split(",")
+        k_regex += [REGEX(x) for x in keywords]
     # OPTION DICT
     if OPTIONS.dict:
         dictionaries = OPTIONS.dict.split(",")
         for dictfile in dictionaries:
-            try:
-                keywords += parse_dict(dictfile, categories)
-                k_regex += [REGEX(x) for x in keywords]
-            except sre_constants_error:
-                ERROR("Dictionary cannot be parsed ({0}).".format(dictfile))
+            keywords += parse_dict(dictfile, categories)
+            k_regex += [REGEX(x) for x in keywords]
     # DEFAULT DICTIONARY
     if not keywords:
         keywords += parse_dict(DEFAULT_DICTIONARY, categories)
