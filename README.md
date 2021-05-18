@@ -42,11 +42,11 @@ So far, only the basic scan based on keywords with output on terminal works.
 
 Coming soon:
 
-* "Stat" mode: Only display statistics about megagrep results.
 * "Comment" mode: Extract comments from source files.
 * "String" mode: Look for strings in source files.
 * Add direct regex support in dictionaries with prefix `regex:`
 * Directory tree analysis (find interesting source files in tree)
+* Improve "stat" mode content (ideas welcome!)
 
 Usage
 -----

@@ -78,6 +78,8 @@ CSV_TAG = ","
 REPLACECOMMA_CSV_TAG = "|"
 # Maximum length of line to output, the rest is truncated with [...] after.
 MAX_LEN = 200
+# Default value for Top X in stat mode
+TOP_VALUE = 10
 
 ###############################################################################
 # GLOBAL FUNCTIONS                                                            #
@@ -162,6 +164,17 @@ def PRINT(message: str, out: str=None) -> None:
         except IOError:
             # Megagrep continues but will not save results to file.
             ERROR("Cannot write to file {0}".format(OUTPUT_FILE))
+
+def PRINT_TOP(summary: list, top: int=TOP_VALUE, out: str=None):
+    """Print top with values from summary to stdout and to a file if option set.
+    Summary is a list of tuples (number of occurrences, values).
+    """
+    ct = 1
+    for occur, value in summary:
+        PRINT("{0: >3}. {1} ({2})".format(ct, value, occur), out)
+        if ct == top:
+            break
+        ct += 1
 
 ###############################################################################
 # OPTIONS                                                                     #
@@ -415,6 +428,10 @@ class Result(object):
         """Returns a list of unique keywords found in result line."""
         return list(set([x[1] for x in self.found]))
     @property
+    def all_keywords(self):
+        """Returns the list of keywords with all occurrences found in line."""
+        return [x[1] for x in self.found]
+    @property
     def result(self):
         """Returns the result as a regular string with absolute path.
         This property is used to write results to files.
@@ -527,9 +544,9 @@ def code_generator(filename: str, stats: Stats):
       [(2, passwd), (10, sql), (36, passwd)]
     """
     try:
-        VERBOSE("Scanning file {0}...".format(filename))
         with open(filename, 'r') as fd:
             ct = -1
+            VERBOSE("Scanning file {0}...".format(filename))
             lines = fd.readlines()
             for line in lines:
                 ct += 1
@@ -595,6 +612,28 @@ def search(basepath: str) -> list:
     return results, stats
 
 ###############################################################################
+# ANALYSIS                                                                    #
+###############################################################################
+
+def top_counter(full_list: list) -> list:
+    """Returns list of tuple (number of occurrences, value) from full_list."""
+    unique = set(full_list)
+    summary = []
+    for value in unique:
+        summary.append((full_list.count(value), value))
+    return sorted(summary, reverse=True)
+
+def top_keywords(results: list):
+    all_keywords = []
+    for result in results:
+        all_keywords += result.all_keywords
+    return top_counter(all_keywords)
+
+def top_files(results: list):
+    all_files = [x.path for x in results]
+    return top_counter(all_files)
+
+###############################################################################
 # RUN                                                                         #
 ###############################################################################
 
@@ -619,16 +658,6 @@ VERBOSE("Path to scan (recursive): {0}".format(PATH))
 INCLUDE, EXCLUDE = init_include_exclude()
 VERBOSE("File included: {0}".format(OPTIONS.include))
 VERBOSE("File excluded: {0}".format(OPTIONS.exclude))
-VERBOSE("{0:-^69}".format(" Start scan "))
-
-#--- Search -------------------------------------------------------------------#
-
-RESULTS, STATS = search(PATH)
-
-#--- Output -------------------------------------------------------------------#
-
-VERBOSE("{0:-^69}".format(" Output "))
-
 # FILE OUTPUT MODE
 OUTPUT_FILE=None
 if OPTIONS.file:
@@ -637,6 +666,16 @@ if OPTIONS.file:
         WARNING("If the file already exists, Megagrep will not overwrite it.")
     else:
         OUTPUT_FILE = realpath(OPTIONS.file)
+        VERBOSE("Output will be written to file: {0}".format(OUTPUT_FILE))
+
+#--- Search -------------------------------------------------------------------#
+
+VERBOSE("{0:-^69}".format(" Start scan "))
+RESULTS, STATS = search(PATH)
+
+#--- Output -------------------------------------------------------------------#
+
+VERBOSE("{0:-^69}".format(" Output "))
 
 # CSV OUTPUT MODE
 if OPTIONS.csv and len(RESULTS):
@@ -645,20 +684,26 @@ if OPTIONS.csv and len(RESULTS):
         PRINT(result.csv, OUTPUT_FILE)
 
 # EXTENDED OUTPUT MODE
-elif OPTIONS.extended and len(RESULTS):
+elif OPTIONS.extended:
     for result in RESULTS:
         print("{0:-^79}".format(""))
         PRINT(result.previous_line, OUTPUT_FILE)
         PRINT(result, OUTPUT_FILE)
         PRINT(result.next_line, OUTPUT_FILE)
 
+# STAT OUTPUT MODE
+elif OPTIONS.stat:
+    PRINT("{0:-^79}".format(" Most frequent keywords "), OUTPUT_FILE)
+    PRINT_TOP(top_keywords(RESULTS), TOP_VALUE, OUTPUT_FILE)
+    PRINT("{0:-^79}".format(" Files with most results "), OUTPUT_FILE)
+    PRINT_TOP(top_files(RESULTS), TOP_VALUE, OUTPUT_FILE)
+
 # REGULAR OUTPUT MODE
-elif not OPTIONS.stat and len(RESULTS):
+else:
     for result in RESULTS:
         PRINT(result, OUTPUT_FILE)
 
-# STAT OUTPUT MODE (printed to stdout anyway, at least for now)
-print("{0:-^79}".format(" Summary "))
+PRINT("{0:-^79}".format(" Summary "), OUTPUT_FILE)
 PRINT(STATS, OUTPUT_FILE)
 
 if OUTPUT_FILE:
