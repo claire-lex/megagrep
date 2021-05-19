@@ -63,6 +63,7 @@ DEFAULT_DICTIONARY = join(dirname(realpath(__file__)), join("dicts", "global.mg"
 COMMENT_TAG = "#"
 # Category header in dictionary files. Currently between brackets: [category]
 LIST_REGEX = re_compile(r"^\[([\w\-\_\+]*)\]$")
+STRING_ONELINE_REGEX = re_compile("[^{0}]*{0}([^{0}]+){0}[^{0}]*".format("\"")) 
 
 #--- File handling -----------------------------------------------------------#
 
@@ -535,7 +536,7 @@ def code_generator(filename: str, stats: Stats):
 
     Returns a tuple with format::
 
-      line_no, line, list of keyword found with indexes.
+      (line_no, line, list of keyword found with indexes, previous, next line)
 
     Keyword list is a list of tuple with format (index, name). Example::
 
@@ -579,26 +580,41 @@ def comment_generator(filename: str, stats: Stats):
 
 def strings_generator(filename: str, stats: Stats):
     """Simple generator function for finding strings source code files.
-    Only supports double quote strings so far and strings on one line so far.
+    Only supports double quote strings and strings on one line so far.
+
+    Returns a tuple with format::
+
+      (line_no, line, list of keyword found with indexes, previous, next line)
+
+    Keyword list is a list of tuple with format (index, string). Example::
+
+      [(10, "hello world!"), (20, "dbP@$$w0rd")]
     """
-    re_oneline = re_compile("[^{0}]*{0}([^{0}]+){0}[^{0}]*".format("\""))
-    with open(filename, 'r') as fd:
-        ct = -1
-        VERBOSE("Scanning file {0}...".format(filename))
-        lines = fd.readlines()
-        for line in lines:
-            ct += 1
-            line = line.strip()
-            if not len(line):
-                continue
-            # Case: one line string, there may be several strings on one line
-            strings = re_oneline.findall(line)
-            for string in strings:
-                yield ct, line, [(line.find(string), string)], "before", "after" # TODO
-            # Case: several line strings, already have strings in that line does
-            # not exclude having more line
-            pass
-            ct += 1
+    try:
+        with open(filename, 'r') as fd:
+            ct = -1
+            VERBOSE("Scanning file {0}...".format(filename))
+            lines = fd.readlines()
+            for line in lines:
+                ct += 1
+                line = line.strip()
+                if not len(line):
+                    continue
+                # Case: one line string, there may be several strings on one line
+                found = []
+                index = finditer(STRING_ONELINE_REGEX, line)
+                for i in index:
+                    found.append((i.start(1), i.group(1)))
+                if len(found):
+                    before = lines[ct-1].strip() if ct > 0 else ""
+                    after = lines[ct+1].strip() if ct < len(lines)-1 else ""
+                    yield ct+1, line, sorted(found), before, after
+                # STAT; Number of lines read
+                stats.nb_line += 1
+            # STAT: Number of files read
+            stats.nb_file += 1
+    except (IOError, UnicodeDecodeError):
+        VERBOSE("Error while parsing file {0}.".format(filename))
 
 def select_generator() -> object:
     """Return the appropriate generator function depending on the mode."""

@@ -1,17 +1,34 @@
-Megagrep
-========
+```
+-------------------------------------------------------------------------------
+                  ,__ __                                      
+                 /|  |  |                                     
+                  |  |  |   _   __,  __,   __,  ,_    _    _  
+                  |  |  |  |/  /  | /  |  /  | /  |  |/  |/ \_
+                  |  |  |_/|__/\_/|/\_/|_/\_/|/   |_/|__/|__/ 
+                                 /|         /|          /|    
+                                 \|         \|          \|    
 
-> Or how to begin a code review
+-------------------------------------------------------------------------------
+```
 
-**Megagrep helps beginning a code review by looking at keywords in the code using
-"grep", but this is not static analysis tool**. 
+Megagrep helps beginning a code review by searching for patterns in the code
+using "grep". **It does not search for vulnerabilities directly but for places
+where you could manually find some**.
 
-Megagrep and its keyword sets are built to search for places in the code that
-require to be investigated manually. It will give you **locations** (where to
-find vulnerabilities), not vulnerabilities directly.
+Megagrep searches for patterns in the code that require to be investigated
+manually for security issues. It uses several search modes (keyword-based or
+strings) and outputs either detailed results or global information to discover
+the code and locate interesting pieces of code (most frequent keywords, file
+with most results, etc.).
 
-If you want a grep-based static analysis tool (for vulnerability research), you
-can check [Graudit](https://github.com/wireghoul/graudit).
+This is not *really* a security-focused static analysis tool. Patterns are
+voluntarily not too restrictive and will probably trigger false positives, but
+to figure it out you have to... review all suspicious pieces of code :). In
+other words, Megagrep will give you **locations** (where you could find
+vulnerabilities), not vulnerabilities directly.
+
+If you want a grep-based static analysis tool for direct vulnerability research,
+you can check [Graudit](https://github.com/wireghoul/graudit).
 
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/claire-lex/megagrep)
 ![GitHub](https://img.shields.io/github/license/claire-lex/megagrep)
@@ -45,21 +62,6 @@ Print help:
 ```
 python megagrep.py -h
 ```
-
-**More usage examples below!**
-
-Status
-------
-
-So far, only the basic scan based on keywords with output on terminal works.
-
-Coming soon:
-
-* "Comment" mode: Extract comments from source files.
-* "String" mode: Look for strings in source files.
-* Add direct regex support in dictionaries with prefix `regex:`
-* Directory tree analysis (find interesting source files in tree)
-* Improve "stat" mode content (ideas welcome!)
 
 Usage
 -----
@@ -99,8 +101,9 @@ classes/Login.php:57: $st->execute();
 [...]
 ```
 
-Stat scan (only display global informaiton in scan):
+Stat scan (only display global scan information), excluding `.js` files:
 ```
+$> python -S -x "*.js"
 [...]
 --------------------------- Most frequent keywords ----------------------------
   1. login (21)
@@ -114,19 +117,42 @@ Stat scan (only display global informaiton in scan):
   9. md5 (2)
  10. exec (2)
 --------------------------- Files with most results ---------------------------
-  1. DUMMY_PATH/index.php (20)
-  2. DUMMY_PATH/classes/Login.php (14)
-  3. DUMMY_PATH/templates/fonts/fontawesome-webfont.svg (12)
-  4. DUMMY_PATH/templates/loginform.php (8)
-  5. DUMMY_PATH/config.php (3)
-  6. DUMMY_PATH/templates/logged.php (1)
-  7. DUMMY_PATH/templates/include/header.php (1)
-  8. DUMMY_PATH/templates/edit.php (1)
+  1. /path/to/index.php (20)
+  2. /path/to/classes/Login.php (14)
+  3. /path/to/templates/fonts/fontawesome-webfont.svg (12)
+  4. /path/to/templates/loginform.php (8)
+  5. /path/to/config.php (3)
+  6. /path/to/templates/logged.php (1)
+  7. /path/to/templates/include/header.php (1)
+  8. /path/to/templates/edit.php (1)
+[...]
+```
+
+Strings mode (Search for one-line strings), including only `.php` files:
+```
+$> python megagrep.py -T -i "*.php"
+[...]
+config.php:6: define("DB_DSN", "mysql:host=localhost;dbname=testo"); (mysql:host=localhost;dbname=testo, DB_DSN)
+config.php:7: define("DB_USERNAME", "root"); (DB_USERNAME, root)
+config.php:8: define("DB_PASSWORD", "P@$$w0rd"); (DB_PASSWORD, P@$$w0rd)
+config.php:9: define("CLASS_PATH", "classes"); (classes, CLASS_PATH)
+config.php:10: define("TEMPLATE_PATH", "templates"); (TEMPLATE_PATH, templates)
+[...]
+```
+
+Output to format mode (add `-f file.csv` to also export to a CSV file):
+```
+$> python megagrep.py -c -i "*.php" 
+[...]
+Login.php,51,public static function checkAuth($bank_id, $password) {,auth*,,,/path/to/classes/Login.php
+Login.php,53,$sql = "SELECT * FROM users WHERE bank_id='".$bank_id;,sql,,,/path/to/classes/Login.php
+Login.php,54,$sql = $sql."' AND password='".md5($password)."';";,sql|md5,,,/path/to/classes/Login.php
+Login.php,56,$st = $conn->prepare($sql);,sql,,,/path/to/classes/Login.php
+Login.php,57,$st->execute();,exec,,,/path/to/classes/Login.php
 [...]
 ```
 
 ### Use/write dictionaries
-
 
 You can use default dictionaries in ``dicts/`` and also use your own:
 
@@ -164,3 +190,20 @@ You can choose to use only part of a dictionary with ``-l``:
 ```
 python megagrep.py -l authentication
 ```
+
+Option `-w` can be used to search specific words directly (alone or combined
+with a dictionary):
+
+```
+$> python megagrep.py -w bad,wrong # Search for words "bad" and "wrong" only
+$> python megagrep.py -w bad -d my_dict # Search for "bad" and the content of my_dict
+```
+
+Coming soon
+-----------
+
+* "Comment" mode: Extract comments from source files.
+* Add direct regex support in dictionaries with prefix `regex:`
+* Directory tree analysis (find interesting source files in tree)
+* Improve "stat" mode content (ideas welcome!)
+* Improve "string" mode: Look for strings on multiple lines in source files.
