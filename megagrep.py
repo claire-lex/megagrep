@@ -237,8 +237,8 @@ OPTS_DICT = (
     # Mode
     ("-K", "--keyword", H_KEYWORD, D_KEYWORD, None),
     ("-S", "--stat", H_STAT, D_STAT, None),
-    # ("-C", "--comment", H_COMMENT, D_COMMENT, None),
-    # ("-T", "--strings", H_STRINGS, D_STRINGS, None),
+    ("-C", "--comment", H_COMMENT, D_COMMENT, None),
+    ("-T", "--strings", H_STRINGS, D_STRINGS, None),
     # Input
     ("-i", "--include", H_INCLUDE, D_INCLUDE, M_FILE),
     ("-x", "--exclude", H_EXCLUDE, D_EXCLUDE, M_FILE),
@@ -578,18 +578,35 @@ def comment_generator(filename: str, stats: Stats):
     raise NotImplementedError("comment_generator")
 
 def strings_generator(filename: str, stats: Stats):
-    """TODO"""
-    raise NotImplementedError("strings_generator")
+    """Simple generator function for finding strings source code files.
+    Only supports double quote strings so far and strings on one line so far.
+    """
+    re_oneline = re_compile("[^{0}]*{0}([^{0}]+){0}[^{0}]*".format("\""))
+    with open(filename, 'r') as fd:
+        ct = -1
+        VERBOSE("Scanning file {0}...".format(filename))
+        lines = fd.readlines()
+        for line in lines:
+            ct += 1
+            line = line.strip()
+            if not len(line):
+                continue
+            # Case: one line string, there may be several strings on one line
+            strings = re_oneline.findall(line)
+            for string in strings:
+                yield ct, line, [(line.find(string), string)], "before", "after" # TODO
+            # Case: several line strings, already have strings in that line does
+            # not exclude having more line
+            pass
+            ct += 1
 
 def select_generator() -> object:
     """Return the appropriate generator function depending on the mode."""
-    if OPTIONS.keyword or OPTIONS.stat:
-        return code_generator
-    elif OPTIONS.comment:
+    if OPTIONS.comment:
         return comment_generator
     elif OPTIONS.strings:
         return strings_generator
-    ERROR("Unknown mode.")
+    return code_generator
 
 def search(basepath: str) -> list:
     """Search keywords in all matching files from path."""

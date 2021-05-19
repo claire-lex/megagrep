@@ -13,6 +13,7 @@ find vulnerabilities), not vulnerabilities directly.
 If you want a grep-based static analysis tool (for vulnerability research), you
 can check [Graudit](https://github.com/wireghoul/graudit).
 
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/claire-lex/megagrep)
 ![GitHub](https://img.shields.io/github/license/claire-lex/megagrep)
 
 Getting Started
