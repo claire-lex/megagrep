@@ -44,12 +44,12 @@ optional arguments:
 """
 
 from os import access, R_OK, getcwd, walk
-from os.path import sep, dirname, join, realpath, relpath, exists, isfile, basename
+from os.path import dirname, join, realpath, relpath, exists, isfile, basename
 from textwrap import fill, shorten
 from argparse import ArgumentParser
 from importlib.util import find_spec
 from re import finditer, IGNORECASE
-from re import compile as re_compile, search as re_search, escape as re_escape
+from re import compile as re_compile, escape as re_escape
 
 ###############################################################################
 # CONFIGURATION                                                               #
@@ -60,15 +60,19 @@ from re import compile as re_compile, search as re_search, escape as re_escape
 # Default dictionary is dict/global.mg in megagrep.py's directory
 DEFAULT_DICTIONARY = join(dirname(realpath(__file__)), join("dicts", "global.mg"))
 # Comment tag set in dictionary files. Everything after this tag in a line is ignored.
-COMMENT_TAG = "#"
+DICT_COMMENT_TAG = "#"
 # Category header in dictionary files. Currently between brackets: [category]
 LIST_REGEX = re_compile(r"^\[([\w\-\_\+]*)\]$")
-STRING_ONELINE_REGEX = re_compile("[^{0}]*{0}([^{0}]+){0}[^{0}]*".format("\"")) 
 
 #--- File handling -----------------------------------------------------------#
 
 # Default files not to read
 DEFAULT_EXCLUDE = ("*.min.js,*.css")
+
+#--- Search -----------------------------------------------------------#
+
+STRING_ONELINE_REGEX = re_compile("[^{0}]*{0}([^{0}]+){0}[^{0}]*".format("\""))
+COMMENT_ONELINE_REGEX = re_compile("(//.*|#.*)")
 
 #--- Output ------------------------------------------------------------------#
 
@@ -97,12 +101,12 @@ IS_PYFIGLET = True if find_spec("pyfiglet") else False
 if IS_PYFIGLET:
     from pyfiglet import figlet_format
 else:
-    WARNING("Megagrep requires \"pyfiglet\" to print beautiful text. " \
+    print("[WARNING] Megagrep requires \"pyfiglet\" to print beautiful text. " \
             "(pip install pyfiglet)")
 if IS_TERMCOLOR:
     from termcolor import colored
 else:
-    WARNING("Megagrep requires \"termcolor\" to color the output. " \
+    print("[WARNING] Megagrep requires \"termcolor\" to color the output. " \
             "(pip install termcolor)")
 
 #--- Messages ----------------------------------------------------------------#
@@ -301,7 +305,7 @@ def parse_dict(dictfile: str, categories: list=None) -> list:
     VERBOSE("Adding dictionary: {0}".format(dictfile))
     with open(dictfile, "r") as fd:
         for line in fd:
-            line = line.split(COMMENT_TAG)[0].strip()
+            line = line.split(DICT_COMMENT_TAG)[0].strip()
             if not len(line):
                 continue
             category_match = LIST_REGEX.match(line)
@@ -575,8 +579,42 @@ def code_generator(filename: str, stats: Stats):
         VERBOSE("Error while parsing file {0}.".format(filename))
 
 def comment_generator(filename: str, stats: Stats):
-    """TODO"""
-    raise NotImplementedError("comment_generator")
+    """Simple generator function for finding comments in source code files.
+    Only supports commands on one line so far.
+
+    Returns a tuple with format::
+
+      (line_no, line, list of comments found with indexes, previous, next line)
+
+    Comment list is a list of tuple with format (index, string). Example::
+
+      [(10, "# TODO: does not work"), (20, "// Exception")]
+    """
+    try:
+        with open(filename, 'r') as fd:
+            ct = -1
+            VERBOSE("Scanning file for comments {0}...".format(filename))
+            lines = fd.readlines()
+            for line in lines:
+                ct += 1
+                line = line.strip()
+                if not len(line):
+                    continue
+                # Case: one line string, there may be several strings on one line
+                found = []
+                index = finditer(COMMENT_ONELINE_REGEX, line)
+                for i in index:
+                    found.append((i.start(1), i.group(1)))
+                if len(found):
+                    before = lines[ct-1].strip() if ct > 0 else ""
+                    after = lines[ct+1].strip() if ct < len(lines)-1 else ""
+                    yield ct+1, line, sorted(found), before, after
+                # STAT; Number of lines read
+                stats.nb_line += 1
+            # STAT: Number of files read
+            stats.nb_file += 1
+    except (IOError, UnicodeDecodeError):
+        VERBOSE("Error while parsing file {0}.".format(filename))
 
 def strings_generator(filename: str, stats: Stats):
     """Simple generator function for finding strings source code files.
@@ -584,16 +622,16 @@ def strings_generator(filename: str, stats: Stats):
 
     Returns a tuple with format::
 
-      (line_no, line, list of keyword found with indexes, previous, next line)
+      (line_no, line, list of strings found with indexes, previous, next line)
 
-    Keyword list is a list of tuple with format (index, string). Example::
+    String list is a list of tuple with format (index, string). Example::
 
       [(10, "hello world!"), (20, "dbP@$$w0rd")]
     """
     try:
         with open(filename, 'r') as fd:
             ct = -1
-            VERBOSE("Scanning file {0}...".format(filename))
+            VERBOSE("Scanning file for strings {0}...".format(filename))
             lines = fd.readlines()
             for line in lines:
                 ct += 1
@@ -654,13 +692,15 @@ def top_counter(full_list: list) -> list:
         summary.append((full_list.count(value), value))
     return sorted(summary, reverse=True)
 
-def top_keywords(results: list):
+def top_keywords(results: list) -> list:
+    """Returns most frequently found keywords."""
     all_keywords = []
     for result in results:
         all_keywords += result.all_keywords
     return top_counter(all_keywords)
 
-def top_files(results: list):
+def top_files(results: list) -> list:
+    """Returns files with the most results."""
     all_files = [x.path for x in results]
     return top_counter(all_files)
 
@@ -689,8 +729,9 @@ VERBOSE("Path to scan (recursive): {0}".format(PATH))
 INCLUDE, EXCLUDE = init_include_exclude()
 VERBOSE("File included: {0}".format(OPTIONS.include))
 VERBOSE("File excluded: {0}".format(OPTIONS.exclude))
+
 # FILE OUTPUT MODE
-OUTPUT_FILE=None
+OUTPUT_FILE = None
 if OPTIONS.file:
     if CHECKFILE(OPTIONS.file): # File exists
         WARNING("File {0} cannot be opened for writing.".format(OPTIONS.file))

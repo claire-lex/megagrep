@@ -32,6 +32,8 @@ you can check [Graudit](https://github.com/wireghoul/graudit).
 
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/claire-lex/megagrep)
 ![GitHub](https://img.shields.io/github/license/claire-lex/megagrep)
+![Help wanted](https://img.shields.io/badge/Help%20me-New%20dictionaries-brightgreen)
+![Useful statistics](https://img.shields.io/badge/Help%20me-Useful%20statistics-brightgreen)
 
 Getting Started
 ---------------
@@ -202,8 +204,10 @@ $> python megagrep.py -w bad -d my_dict # Search for "bad" and the content of my
 Coming soon
 -----------
 
-* "Comment" mode: Extract comments from source files.
 * Add direct regex support in dictionaries with prefix `regex:`
 * Directory tree analysis (find interesting source files in tree)
+* Export results as HTML
+* Add better dictionaries (help welcome!)
 * Improve "stat" mode content (ideas welcome!)
 * Improve "string" mode: Look for strings on multiple lines in source files.
+* Improve "comment" mode: Extract comments on multiple lines from source files.
