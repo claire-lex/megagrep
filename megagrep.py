@@ -6,9 +6,9 @@
 # pylint: disable=invalid-name
 
 """
-usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-i files)] [-x file(s)]
-                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-e]
-                   [-f filename]
+usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-L] [-C] [-T] [-i files)]
+                   [-x file(s)] [-w word(s)] [-d file(s)] [-l list(s] [-c]
+                   [-e] [-f filename]
                    [path]
 
 Megagrep helps beginning a code review by looking at keywords using "grep".
@@ -27,6 +27,9 @@ optional arguments:
                         mode).
   -S, --stat            Give only statistics about the code (rely on other
                         modes).
+  -L, --ls              Give results statistics on the source directory tree.
+  -C, --comment         Search comments in the code.
+  -T, --strings         Search strings in the code.
   -i file(s), --include file(s)
                         Files to include in search (ex: *.java).
   -x file(s), --exclude file(s)
@@ -180,6 +183,16 @@ def PRINT_TOP(summary: list, top: int=TOP_VALUE, out: str=None):
             break
         ct += 1
 
+def PRINT_TREE(path: str, message: str="", out: str=None) -> None:
+    """Print directory tree with a syntax close to the `tree` command."""
+    if OPTIONS.ls:
+        rel = relpath(path)
+        level = len(rel.split("/"))
+        pre = "   < " if message else "--"
+        end = " >" if message else ""
+        message = message if message else basename(rel)
+        PRINT("|{0}{1} {2}{3}".format("   | "* (level-1), pre, message, end), out)
+
 ###############################################################################
 # OPTIONS                                                                     #
 ###############################################################################
@@ -193,6 +206,7 @@ D_VERBOSE = False
 D_SENSITIVE = False
 D_KEYWORD = True
 D_STAT = False
+D_LS = False
 D_COMMENT = False
 D_STRINGS = False
 D_INCLUDE = None
@@ -212,6 +226,7 @@ H_VERBOSE = "Verbose mode."
 H_SENSITIVE = "Enable case-sensitive mode (default is case insensitive)."
 H_KEYWORD = "Search by keywords from a dictionary file (default mode)."
 H_STAT = "Give only statistics about the code (rely on other modes)."
+H_LS = "Give results statistics on the source directory tree."
 H_COMMENT = "Search comments in the code."
 H_STRINGS = "Search strings in the code."
 H_INCLUDE = "Files to include in search (ex: *.java)."
@@ -242,6 +257,7 @@ OPTS_DICT = (
     # Mode
     ("-K", "--keyword", H_KEYWORD, D_KEYWORD, None),
     ("-S", "--stat", H_STAT, D_STAT, None),
+    ("-L", "--ls", H_LS, D_LS, None),
     ("-C", "--comment", H_COMMENT, D_COMMENT, None),
     ("-T", "--strings", H_STRINGS, D_STRINGS, None),
     # Input
@@ -500,7 +516,8 @@ class Stats(object):
 
     :param nb_file: Total number of scanned files.
     :param nb_line: Total number of scanned lines.
-    TODO
+    :param nb_result: Total number of results.
+    :param nb_resline: Total number of lines with at least one result.
     """
     def __init__(self) -> None:
         self.nb_file = 0
@@ -600,31 +617,40 @@ def megagenerator(filename: str, stats: Stats) -> None:
                     after = lines[ct+1].strip() if ct < len(lines)-1 else ""
                     # Ct start at 0, we increment for actual line number starting at 1
                     yield ct+1, line, sorted(found), before, after
-                    # STAT; Number of lines with result, total number of results
+                    # STAT: Number of lines with result, total number of results
                     stats.nb_result += len(found)
                     stats.nb_resline += 1
-                # STAT; Number of lines read
+                # STAT: Number of lines read
                 stats.nb_line += 1
             # STAT: Number of files read
             stats.nb_file += 1
     except (IOError, UnicodeDecodeError):
         VERBOSE("Error while parsing file {0}.".format(filename))
 
-def search(basepath: str) -> list:
+def search(basepath: str, out:str = None) -> list:
     """Search keywords in all matching files from path."""
     stats = Stats()
     results = []
     for path, dirs, files in walk(basepath):
+        PRINT_TREE(path, out=out)
         # Ignore hidden
         files = [f for f in files if not f[0] == '.']
         dirs[:] = [d for d in dirs if not d[0] == '.']
         for item in files:
             # Apply include and exclude list on item name
             if is_included(item):
+                file_results = []
                 item_path = join(path, item)
                 for nb, line, content, before, after in megagenerator(item_path, stats):
-                    results.append(Result(nb, line, content, item_path, before,
+                    file_results.append(Result(nb, line, content, item_path, before,
                                           after))
+                if len(file_results):
+                    top = [y for x, y in top_keywords(file_results)]
+                    PRINT_TREE(item_path, out=out)
+                    PRINT_TREE(item_path, "{0} results | Top: {1}".format(len(file_results),
+                                                                    ", ".join(top[:3])),
+                         out=out)
+                results += file_results
     return results, stats
 
 ###############################################################################
@@ -690,7 +716,7 @@ if OPTIONS.file:
 #--- Search -------------------------------------------------------------------#
 
 VERBOSE("{0:-^69}".format(" Start scan "))
-RESULTS, STATS = search(PATH)
+RESULTS, STATS = search(PATH, OUTPUT_FILE)
 
 #--- Output -------------------------------------------------------------------#
 
@@ -718,7 +744,7 @@ elif OPTIONS.stat:
     PRINT_TOP(top_files(RESULTS), TOP_VALUE, OUTPUT_FILE)
 
 # REGULAR OUTPUT MODE
-else:
+elif not OPTIONS.ls:
     for result in RESULTS:
         PRINT(result, OUTPUT_FILE)
 

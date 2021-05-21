@@ -154,6 +154,32 @@ Login.php,57,$st->execute();,exec,,,/path/to/classes/Login.php
 [...]
 ```
 
+Ls mode (outputs details about directory tree), including only `.php` files:
+```
+[...]
+|-- .
+|-- config.php
+|   <  2 results | Top: sql, login >
+|-- index.php
+|   <  20 results | Top: login, session, auth* >
+|-- classes
+|   | -- Login.php
+|   |    <  12 results | Top: sql, login, exec >
+|-- templates
+|   | -- logged.php
+|   |    <  1 results | Top: md5 >
+|   | -- loginform.php
+|   |    <  4 results | Top: login, auth* >
+|   | -- css
+|   | -- fonts
+|   | -- images
+|   | -- include
+|   |    | -- header.php
+|   |    |    <  1 results | Top: query >
+|   | -- js
+[...]
+```
+
 ### Use/write dictionaries
 
 You can use default dictionaries in ``dicts/`` and also use your own:
@@ -205,9 +231,9 @@ Coming soon
 -----------
 
 * Add direct regex support in dictionaries with prefix `regex:`
-* Directory tree analysis (find interesting source files in tree)
 * Export results as HTML
 * Add better dictionaries (help welcome!)
 * Improve "stat" mode content (ideas welcome!)
 * Improve "string" mode: Look for strings on multiple lines in source files.
 * Improve "comment" mode: Extract comments on multiple lines from source files.
+* Improve "ls" mode: Find keywords in filenames, locate specific files.
