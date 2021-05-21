@@ -16,13 +16,13 @@ using "grep". **It does not search for vulnerabilities directly but for places
 where you could manually find some**.
 
 Megagrep searches for patterns in the code that require to be investigated
-manually for security issues. It uses several search modes (keyword-based or
-strings) and outputs either detailed results or global information to discover
-the code and locate interesting pieces of code (most frequent keywords, file
-with most results, etc.).
+manually for security issues. It uses several search modes (keyword-based,
+strings or comments extraction) and outputs either detailed results or global
+information to discover the code and locate interesting pieces of code (most
+frequent keywords, files with the most results, etc.).
 
 This is not *really* a security-focused static analysis tool. Patterns are
-voluntarily not too restrictive and will probably trigger false positives, but
+intentionally not too restrictive and will probably trigger false positives, but
 to figure it out you have to... review all suspicious pieces of code :). In
 other words, Megagrep will give you **locations** (where you could find
 vulnerabilities), not vulnerabilities directly.

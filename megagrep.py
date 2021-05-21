@@ -535,18 +535,54 @@ def is_included(filename: str) -> bool:
         return True
     return False
 
-def code_generator(filename: str, stats: Stats):
-    """Open a file and yield each line where at least one keyword was found.
+def pattern_keyword(line: str) -> list:
+    """Keyword-based mode."""
+    found = []
+    for keyword, k_regex in zip(KEYWORDS, K_REGEX):
+        index = [m.start() for m in finditer(k_regex, line)]
+        if len(index):
+            for i in index:
+                found.append((i, keyword))
+    return found
+
+def pattern_comment(line: str) -> list:
+    """One-line comments extraction mode."""
+    found = []
+    index = finditer(COMMENT_ONELINE_REGEX, line)
+    for i in index:
+        found.append((i.start(1), i.group(1)))
+    return found
+
+def pattern_strings(line: str) -> list:
+    """One-line strings extraction mode."""
+    found = []
+    index = finditer(STRING_ONELINE_REGEX, line)
+    for i in index:
+        found.append((i.start(1), i.group(1)))
+    return found
+
+def select_pattern() -> object:
+    """Return the appropriate search function depending on the mode."""
+    if OPTIONS.comment:
+        return pattern_comment
+    elif OPTIONS.strings:
+        return pattern_strings
+    return pattern_keyword
+
+
+def megagenerator(filename: str, stats: Stats) -> None:
+    """Generator function searching for mode-defined patterns in lines.
 
     Returns a tuple with format::
 
-      (line_no, line, list of keyword found with indexes, previous, next line)
+      (line_no, line, found patterns, previous, next line)
 
-    Keyword list is a list of tuple with format (index, name). Example::
+    "Found pattern" is a list of tuple with format (index, name). Example::
 
       [(2, passwd), (10, sql), (36, passwd)]
     """
     try:
+        pattern_search = select_pattern()
         with open(filename, 'r') as fd:
             ct = -1
             VERBOSE("Scanning file {0}...".format(filename))
@@ -556,117 +592,28 @@ def code_generator(filename: str, stats: Stats):
                 line = line.strip()
                 if not len(line):
                     continue
-                # Look for keywords
-                found = []
-                for keyword, k_regex in zip(KEYWORDS, K_REGEX):
-                    index = [m.start() for m in finditer(k_regex, line)]
-                    if len(index):
-                        for i in index:
-                            stats.nb_result += 1
-                            found.append((i, keyword))
+                # Look for pattern
+                found = pattern_search(line)
                 # Time to yield if keyword found
                 if len(found):
-                    stats.nb_resline += 1
                     before = lines[ct-1].strip() if ct > 0 else ""
                     after = lines[ct+1].strip() if ct < len(lines)-1 else ""
                     # Ct start at 0, we increment for actual line number starting at 1
                     yield ct+1, line, sorted(found), before, after
+                    # STAT; Number of lines with result, total number of results
+                    stats.nb_result += len(found)
+                    stats.nb_resline += 1
                 # STAT; Number of lines read
                 stats.nb_line += 1
             # STAT: Number of files read
             stats.nb_file += 1
     except (IOError, UnicodeDecodeError):
         VERBOSE("Error while parsing file {0}.".format(filename))
-
-def comment_generator(filename: str, stats: Stats):
-    """Simple generator function for finding comments in source code files.
-    Only supports commands on one line so far.
-
-    Returns a tuple with format::
-
-      (line_no, line, list of comments found with indexes, previous, next line)
-
-    Comment list is a list of tuple with format (index, string). Example::
-
-      [(10, "# TODO: does not work"), (20, "// Exception")]
-    """
-    try:
-        with open(filename, 'r') as fd:
-            ct = -1
-            VERBOSE("Scanning file for comments {0}...".format(filename))
-            lines = fd.readlines()
-            for line in lines:
-                ct += 1
-                line = line.strip()
-                if not len(line):
-                    continue
-                # Case: one line string, there may be several strings on one line
-                found = []
-                index = finditer(COMMENT_ONELINE_REGEX, line)
-                for i in index:
-                    found.append((i.start(1), i.group(1)))
-                if len(found):
-                    before = lines[ct-1].strip() if ct > 0 else ""
-                    after = lines[ct+1].strip() if ct < len(lines)-1 else ""
-                    yield ct+1, line, sorted(found), before, after
-                # STAT; Number of lines read
-                stats.nb_line += 1
-            # STAT: Number of files read
-            stats.nb_file += 1
-    except (IOError, UnicodeDecodeError):
-        VERBOSE("Error while parsing file {0}.".format(filename))
-
-def strings_generator(filename: str, stats: Stats):
-    """Simple generator function for finding strings source code files.
-    Only supports double quote strings and strings on one line so far.
-
-    Returns a tuple with format::
-
-      (line_no, line, list of strings found with indexes, previous, next line)
-
-    String list is a list of tuple with format (index, string). Example::
-
-      [(10, "hello world!"), (20, "dbP@$$w0rd")]
-    """
-    try:
-        with open(filename, 'r') as fd:
-            ct = -1
-            VERBOSE("Scanning file for strings {0}...".format(filename))
-            lines = fd.readlines()
-            for line in lines:
-                ct += 1
-                line = line.strip()
-                if not len(line):
-                    continue
-                # Case: one line string, there may be several strings on one line
-                found = []
-                index = finditer(STRING_ONELINE_REGEX, line)
-                for i in index:
-                    found.append((i.start(1), i.group(1)))
-                if len(found):
-                    before = lines[ct-1].strip() if ct > 0 else ""
-                    after = lines[ct+1].strip() if ct < len(lines)-1 else ""
-                    yield ct+1, line, sorted(found), before, after
-                # STAT; Number of lines read
-                stats.nb_line += 1
-            # STAT: Number of files read
-            stats.nb_file += 1
-    except (IOError, UnicodeDecodeError):
-        VERBOSE("Error while parsing file {0}.".format(filename))
-
-def select_generator() -> object:
-    """Return the appropriate generator function depending on the mode."""
-    if OPTIONS.comment:
-        return comment_generator
-    elif OPTIONS.strings:
-        return strings_generator
-    return code_generator
 
 def search(basepath: str) -> list:
     """Search keywords in all matching files from path."""
     stats = Stats()
     results = []
-    generator = select_generator()
     for path, dirs, files in walk(basepath):
         # Ignore hidden
         files = [f for f in files if not f[0] == '.']
@@ -675,7 +622,7 @@ def search(basepath: str) -> list:
             # Apply include and exclude list on item name
             if is_included(item):
                 item_path = join(path, item)
-                for nb, line, content, before, after in generator(item_path, stats):
+                for nb, line, content, before, after in megagenerator(item_path, stats):
                     results.append(Result(nb, line, content, item_path, before,
                                           after))
     return results, stats
