@@ -1,14 +1,14 @@
 # Megagrep
-# Locate critical areas and keywords in a code
+# Locate critical areas and keywords in code
 #
 # Lex @ https://github.com/claire-lex/megagrep - 2021
 #
 # pylint: disable=invalid-name
 
 """
-usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-i files)] [-x file(s)]
-                   [-w word(s)] [-d file(s)] [-l list(s] [-c] [-e]
-                   [-f filename]
+usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-L] [-C] [-T] [-i files)]
+                   [-x file(s)] [-w word(s)] [-d file(s)] [-l list(s] [-c]
+                   [-e] [-f filename]
                    [path]
 
 Megagrep helps beginning a code review by looking at keywords using "grep".
@@ -27,6 +27,9 @@ optional arguments:
                         mode).
   -S, --stat            Give only statistics about the code (rely on other
                         modes).
+  -L, --ls              Give results statistics on the source directory tree.
+  -C, --comment         Search comments in the code.
+  -T, --strings         Search strings in the code.
   -i file(s), --include file(s)
                         Files to include in search (ex: *.java).
   -x file(s), --exclude file(s)
@@ -44,12 +47,12 @@ optional arguments:
 """
 
 from os import access, R_OK, getcwd, walk
-from os.path import sep, dirname, join, realpath, relpath, exists, isfile, basename
+from os.path import dirname, join, realpath, relpath, exists, isfile, basename
 from textwrap import fill, shorten
 from argparse import ArgumentParser
 from importlib.util import find_spec
 from re import finditer, IGNORECASE
-from re import compile as re_compile, search as re_search, escape as re_escape
+from re import compile as re_compile, escape as re_escape
 
 ###############################################################################
 # CONFIGURATION                                                               #
@@ -60,7 +63,7 @@ from re import compile as re_compile, search as re_search, escape as re_escape
 # Default dictionary is dict/global.mg in megagrep.py's directory
 DEFAULT_DICTIONARY = join(dirname(realpath(__file__)), join("dicts", "global.mg"))
 # Comment tag set in dictionary files. Everything after this tag in a line is ignored.
-COMMENT_TAG = "#"
+DICT_COMMENT_TAG = "#"
 # Category header in dictionary files. Currently between brackets: [category]
 LIST_REGEX = re_compile(r"^\[([\w\-\_\+]*)\]$")
 
@@ -68,6 +71,11 @@ LIST_REGEX = re_compile(r"^\[([\w\-\_\+]*)\]$")
 
 # Default files not to read
 DEFAULT_EXCLUDE = ("*.min.js,*.css")
+
+#--- Search -----------------------------------------------------------#
+
+STRING_ONELINE_REGEX = re_compile("[^{0}]*{0}([^{0}]+){0}[^{0}]*".format("\""))
+COMMENT_ONELINE_REGEX = re_compile("(//.*|#.*)")
 
 #--- Output ------------------------------------------------------------------#
 
@@ -96,12 +104,12 @@ IS_PYFIGLET = True if find_spec("pyfiglet") else False
 if IS_PYFIGLET:
     from pyfiglet import figlet_format
 else:
-    WARNING("Megagrep requires \"pyfiglet\" to print beautiful text. " \
+    print("[WARNING] Megagrep requires \"pyfiglet\" to print beautiful text. " \
             "(pip install pyfiglet)")
 if IS_TERMCOLOR:
     from termcolor import colored
 else:
-    WARNING("Megagrep requires \"termcolor\" to color the output. " \
+    print("[WARNING] Megagrep requires \"termcolor\" to color the output. " \
             "(pip install termcolor)")
 
 #--- Messages ----------------------------------------------------------------#
@@ -175,6 +183,16 @@ def PRINT_TOP(summary: list, top: int=TOP_VALUE, out: str=None):
             break
         ct += 1
 
+def PRINT_TREE(path: str, message: str="", out: str=None) -> None:
+    """Print directory tree with a syntax close to the `tree` command."""
+    if OPTIONS.ls:
+        rel = relpath(path)
+        level = len(rel.split("/"))
+        pre = "   < " if message else "--"
+        end = " >" if message else ""
+        message = message if message else basename(rel)
+        PRINT("|{0}{1} {2}{3}".format("   | "* (level-1), pre, message, end), out)
+
 ###############################################################################
 # OPTIONS                                                                     #
 ###############################################################################
@@ -188,6 +206,7 @@ D_VERBOSE = False
 D_SENSITIVE = False
 D_KEYWORD = True
 D_STAT = False
+D_LS = False
 D_COMMENT = False
 D_STRINGS = False
 D_INCLUDE = None
@@ -207,6 +226,7 @@ H_VERBOSE = "Verbose mode."
 H_SENSITIVE = "Enable case-sensitive mode (default is case insensitive)."
 H_KEYWORD = "Search by keywords from a dictionary file (default mode)."
 H_STAT = "Give only statistics about the code (rely on other modes)."
+H_LS = "Give results statistics on the source directory tree."
 H_COMMENT = "Search comments in the code."
 H_STRINGS = "Search strings in the code."
 H_INCLUDE = "Files to include in search (ex: *.java)."
@@ -237,8 +257,9 @@ OPTS_DICT = (
     # Mode
     ("-K", "--keyword", H_KEYWORD, D_KEYWORD, None),
     ("-S", "--stat", H_STAT, D_STAT, None),
-    # ("-C", "--comment", H_COMMENT, D_COMMENT, None),
-    # ("-T", "--strings", H_STRINGS, D_STRINGS, None),
+    ("-L", "--ls", H_LS, D_LS, None),
+    ("-C", "--comment", H_COMMENT, D_COMMENT, None),
+    ("-T", "--strings", H_STRINGS, D_STRINGS, None),
     # Input
     ("-i", "--include", H_INCLUDE, D_INCLUDE, M_FILE),
     ("-x", "--exclude", H_EXCLUDE, D_EXCLUDE, M_FILE),
@@ -300,7 +321,7 @@ def parse_dict(dictfile: str, categories: list=None) -> list:
     VERBOSE("Adding dictionary: {0}".format(dictfile))
     with open(dictfile, "r") as fd:
         for line in fd:
-            line = line.split(COMMENT_TAG)[0].strip()
+            line = line.split(DICT_COMMENT_TAG)[0].strip()
             if not len(line):
                 continue
             category_match = LIST_REGEX.match(line)
@@ -495,7 +516,8 @@ class Stats(object):
 
     :param nb_file: Total number of scanned files.
     :param nb_line: Total number of scanned lines.
-    TODO
+    :param nb_result: Total number of results.
+    :param nb_resline: Total number of lines with at least one result.
     """
     def __init__(self) -> None:
         self.nb_file = 0
@@ -530,18 +552,54 @@ def is_included(filename: str) -> bool:
         return True
     return False
 
-def code_generator(filename: str, stats: Stats):
-    """Open a file and yield each line where at least one keyword was found.
+def pattern_keyword(line: str) -> list:
+    """Keyword-based mode."""
+    found = []
+    for keyword, k_regex in zip(KEYWORDS, K_REGEX):
+        index = [m.start() for m in finditer(k_regex, line)]
+        if len(index):
+            for i in index:
+                found.append((i, keyword))
+    return found
+
+def pattern_comment(line: str) -> list:
+    """One-line comments extraction mode."""
+    found = []
+    index = finditer(COMMENT_ONELINE_REGEX, line)
+    for i in index:
+        found.append((i.start(1), i.group(1)))
+    return found
+
+def pattern_strings(line: str) -> list:
+    """One-line strings extraction mode."""
+    found = []
+    index = finditer(STRING_ONELINE_REGEX, line)
+    for i in index:
+        found.append((i.start(1), i.group(1)))
+    return found
+
+def select_pattern() -> object:
+    """Return the appropriate search function depending on the mode."""
+    if OPTIONS.comment:
+        return pattern_comment
+    elif OPTIONS.strings:
+        return pattern_strings
+    return pattern_keyword
+
+
+def megagenerator(filename: str, stats: Stats) -> None:
+    """Generator function searching for mode-defined patterns in lines.
 
     Returns a tuple with format::
 
-      line_no, line, list of keyword found with indexes.
+      (line_no, line, found patterns, previous, next line)
 
-    Keyword list is a list of tuple with format (index, name). Example::
+    "Found pattern" is a list of tuple with format (index, name). Example::
 
       [(2, passwd), (10, sql), (36, passwd)]
     """
     try:
+        pattern_search = select_pattern()
         with open(filename, 'r') as fd:
             ct = -1
             VERBOSE("Scanning file {0}...".format(filename))
@@ -551,62 +609,48 @@ def code_generator(filename: str, stats: Stats):
                 line = line.strip()
                 if not len(line):
                     continue
-                # Look for keywords
-                found = []
-                for keyword, k_regex in zip(KEYWORDS, K_REGEX):
-                    index = [m.start() for m in finditer(k_regex, line)]
-                    if len(index):
-                        for i in index:
-                            stats.nb_result += 1
-                            found.append((i, keyword))
+                # Look for pattern
+                found = pattern_search(line)
                 # Time to yield if keyword found
                 if len(found):
-                    stats.nb_resline += 1
                     before = lines[ct-1].strip() if ct > 0 else ""
                     after = lines[ct+1].strip() if ct < len(lines)-1 else ""
                     # Ct start at 0, we increment for actual line number starting at 1
                     yield ct+1, line, sorted(found), before, after
-                # STAT; Number of lines read
+                    # STAT: Number of lines with result, total number of results
+                    stats.nb_result += len(found)
+                    stats.nb_resline += 1
+                # STAT: Number of lines read
                 stats.nb_line += 1
             # STAT: Number of files read
             stats.nb_file += 1
     except (IOError, UnicodeDecodeError):
         VERBOSE("Error while parsing file {0}.".format(filename))
 
-def comment_generator(filename: str, stats: Stats):
-    """TODO"""
-    raise NotImplementedError("comment_generator")
-
-def strings_generator(filename: str, stats: Stats):
-    """TODO"""
-    raise NotImplementedError("strings_generator")
-
-def select_generator() -> object:
-    """Return the appropriate generator function depending on the mode."""
-    if OPTIONS.keyword or OPTIONS.stat:
-        return code_generator
-    elif OPTIONS.comment:
-        return comment_generator
-    elif OPTIONS.strings:
-        return strings_generator
-    ERROR("Unknown mode.")
-
-def search(basepath: str) -> list:
+def search(basepath: str, out:str = None) -> list:
     """Search keywords in all matching files from path."""
     stats = Stats()
     results = []
-    generator = select_generator()
     for path, dirs, files in walk(basepath):
+        PRINT_TREE(path, out=out)
         # Ignore hidden
         files = [f for f in files if not f[0] == '.']
         dirs[:] = [d for d in dirs if not d[0] == '.']
         for item in files:
             # Apply include and exclude list on item name
             if is_included(item):
+                file_results = []
                 item_path = join(path, item)
-                for nb, line, content, before, after in generator(item_path, stats):
-                    results.append(Result(nb, line, content, item_path, before,
+                for nb, line, content, before, after in megagenerator(item_path, stats):
+                    file_results.append(Result(nb, line, content, item_path, before,
                                           after))
+                if len(file_results):
+                    top = [y for x, y in top_keywords(file_results)]
+                    PRINT_TREE(item_path, out=out)
+                    PRINT_TREE(item_path, "{0} results | Top: {1}".format(len(file_results),
+                                                                    ", ".join(top[:3])),
+                         out=out)
+                results += file_results
     return results, stats
 
 ###############################################################################
@@ -621,13 +665,15 @@ def top_counter(full_list: list) -> list:
         summary.append((full_list.count(value), value))
     return sorted(summary, reverse=True)
 
-def top_keywords(results: list):
+def top_keywords(results: list) -> list:
+    """Returns most frequently found keywords."""
     all_keywords = []
     for result in results:
         all_keywords += result.all_keywords
     return top_counter(all_keywords)
 
-def top_files(results: list):
+def top_files(results: list) -> list:
+    """Returns files with the most results."""
     all_files = [x.path for x in results]
     return top_counter(all_files)
 
@@ -656,8 +702,9 @@ VERBOSE("Path to scan (recursive): {0}".format(PATH))
 INCLUDE, EXCLUDE = init_include_exclude()
 VERBOSE("File included: {0}".format(OPTIONS.include))
 VERBOSE("File excluded: {0}".format(OPTIONS.exclude))
+
 # FILE OUTPUT MODE
-OUTPUT_FILE=None
+OUTPUT_FILE = None
 if OPTIONS.file:
     if CHECKFILE(OPTIONS.file): # File exists
         WARNING("File {0} cannot be opened for writing.".format(OPTIONS.file))
@@ -669,7 +716,7 @@ if OPTIONS.file:
 #--- Search -------------------------------------------------------------------#
 
 VERBOSE("{0:-^69}".format(" Start scan "))
-RESULTS, STATS = search(PATH)
+RESULTS, STATS = search(PATH, OUTPUT_FILE)
 
 #--- Output -------------------------------------------------------------------#
 
@@ -697,7 +744,7 @@ elif OPTIONS.stat:
     PRINT_TOP(top_files(RESULTS), TOP_VALUE, OUTPUT_FILE)
 
 # REGULAR OUTPUT MODE
-else:
+elif not OPTIONS.ls:
     for result in RESULTS:
         PRINT(result, OUTPUT_FILE)
 
