@@ -1,5 +1,5 @@
 # Megagrep
-# Locate critical areas and keywords in a code
+# Locate critical areas and keywords in code
 #
 # Lex @ https://github.com/claire-lex/megagrep - 2021
 #

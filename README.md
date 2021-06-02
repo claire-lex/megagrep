@@ -35,6 +35,16 @@ you can check [Graudit](https://github.com/wireghoul/graudit).
 ![Help wanted](https://img.shields.io/badge/Help%20me-New%20dictionaries-brightgreen)
 ![Useful statistics](https://img.shields.io/badge/Help%20me-Useful%20statistics-brightgreen)
 
+- [Getting Started](#getting-started)
+- [How to begin a code review with Megagrep](#how-to-begin-a-code-review-with-megagrep)
+    1. [Tree and code discovery](#tree-and-code-discovery)
+    2. [Keywords-based search](#keywords-based-search)
+    3. [Other search modes](#other-search-modes)
+    4. [Print and save results](#print-and-save-results)
+    5. [Improve Megagrep results](#improve-megagrep-results)
+        - [Use and write dictionaries](#use-and-write-dictionaries)
+- [Coming soon](#coming-soon)
+
 Getting Started
 ---------------
 
@@ -65,45 +75,16 @@ Print help:
 python megagrep.py -h
 ```
 
-Usage
------
+How to begin a code review with Megagrep
+----------------------------------------
 
-### Run scans
+### Tree and code discovery
 
-Default scan (one line per result, with color if termcolor is installed):
-```
-$> python megagrep.py .
-[...]
-classes/Login.php:51: public static function checkAuth($bank_id, $password) { (auth*, passw*d)
-classes/Login.php:52: $conn = new PDO(DB_DSN, DB_USERNAME, DB_PASSWORD); (passw*d)
-classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id; (sql)
-classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';"; (sql, md5, passw*d)
-classes/Login.php:56: $st = $conn->prepare($sql); (sql)
-classes/Login.php:57: $st->execute(); (exec)
-[...]
-```
+When starting a code review, you often have a huge amount of code in a deep and
+messy directory tree, and you don't know where to start. You can use Megagrep to
+have a general idea with statistics (`-S`) of what the code contains, what you
+may find and where:
 
-Extended scan (print lines before and after matching line):
-```
-$> python megagrep.py -e .
-[...]
--------------------------------------------------------------------------------
-classes/Login.php:52: $conn = new PDO(DB_DSN, DB_USERNAME, DB_PASSWORD);
-classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id; (sql)
-classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';";
--------------------------------------------------------------------------------
-classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id;
-classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';"; (md5, passw*d, sql)
-classes/Login.php:55: 
--------------------------------------------------------------------------------
-classes/Login.php:55: 
-classes/Login.php:56: $st = $conn->prepare($sql); (sql)
-classes/Login.php:57: $st->execute();
--------------------------------------------------------------------------------
-[...]
-```
-
-Stat scan (only display global scan information), excluding `.js` files:
 ```
 $> python -S -x "*.js"
 [...]
@@ -130,32 +111,10 @@ $> python -S -x "*.js"
 [...]
 ```
 
-Strings mode (Search for one-line strings), including only `.php` files:
-```
-$> python megagrep.py -T -i "*.php"
-[...]
-config.php:6: define("DB_DSN", "mysql:host=localhost;dbname=testo"); (mysql:host=localhost;dbname=testo, DB_DSN)
-config.php:7: define("DB_USERNAME", "root"); (DB_USERNAME, root)
-config.php:8: define("DB_PASSWORD", "P@$$w0rd"); (DB_PASSWORD, P@$$w0rd)
-config.php:9: define("CLASS_PATH", "classes"); (classes, CLASS_PATH)
-config.php:10: define("TEMPLATE_PATH", "templates"); (TEMPLATE_PATH, templates)
-[...]
-```
+The ls mode (`-L`) helps you locate directories you may want to browse:
 
-Output to format mode (add `-f file.csv` to also export to a CSV file):
 ```
-$> python megagrep.py -c -i "*.php" 
-[...]
-Login.php,51,public static function checkAuth($bank_id, $password) {,auth*,,,/path/to/classes/Login.php
-Login.php,53,$sql = "SELECT * FROM users WHERE bank_id='".$bank_id;,sql,,,/path/to/classes/Login.php
-Login.php,54,$sql = $sql."' AND password='".md5($password)."';";,sql|md5,,,/path/to/classes/Login.php
-Login.php,56,$st = $conn->prepare($sql);,sql,,,/path/to/classes/Login.php
-Login.php,57,$st->execute();,exec,,,/path/to/classes/Login.php
-[...]
-```
-
-Ls mode (outputs details about directory tree), including only `.php` files:
-```
+python megagrep -L
 [...]
 |-- .
 |-- config.php
@@ -180,7 +139,97 @@ Ls mode (outputs details about directory tree), including only `.php` files:
 [...]
 ```
 
-### Use/write dictionaries
+### Keywords-based search
+
+By default, Megagrep outputs a list of lines containing keywords from its own
+default dictionary.
+
+```
+$> python megagrep.py .
+[...]
+classes/Login.php:51: public static function checkAuth($bank_id, $password) { (auth*, passw*d)
+classes/Login.php:52: $conn = new PDO(DB_DSN, DB_USERNAME, DB_PASSWORD); (passw*d)
+classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id; (sql)
+classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';"; (sql, md5, passw*d)
+classes/Login.php:56: $st = $conn->prepare($sql); (sql)
+classes/Login.php:57: $st->execute(); (exec)
+[...]
+```
+
+The extended output option `-e` prints lines before and after matching line:
+
+```
+$> python megagrep.py -e .
+[...]
+-------------------------------------------------------------------------------
+classes/Login.php:52: $conn = new PDO(DB_DSN, DB_USERNAME, DB_PASSWORD);
+classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id; (sql)
+classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';";
+-------------------------------------------------------------------------------
+classes/Login.php:53: $sql = "SELECT * FROM users WHERE bank_id='".$bank_id;
+classes/Login.php:54: $sql = $sql."' AND password='".md5($password)."';"; (md5, passw*d, sql)
+classes/Login.php:55: 
+-------------------------------------------------------------------------------
+classes/Login.php:55: 
+classes/Login.php:56: $st = $conn->prepare($sql); (sql)
+classes/Login.php:57: $st->execute();
+-------------------------------------------------------------------------------
+[...]
+```
+
+To search **in specific files**, the include (`-i`) and exclude (`-x`) options
+can be used.
+
+To search **for specific keywords**, option `-w` can be used to search specific
+words directly (alone or combined with a dictionary):
+
+```
+$> python megagrep.py -w bad,wrong # Search for words "bad" and "wrong" only
+$> python megagrep.py -w bad -d my_dict # Search for "bad" and the content of my_dict
+```
+
+Finally, you can use your own dictionary file with `-d` (see below for syntax
+examples) or use part of a dictionary with `-l` to select a section (ex:
+`authentication`).
+
+### Other search modes
+
+Megagrep includes modes to extract strings (`-T`) and comments (`-C`) from the
+code.
+
+```
+$> python megagrep.py -T -i "*.php"
+[...]
+config.php:6: define("DB_DSN", "mysql:host=localhost;dbname=testo"); (mysql:host=localhost;dbname=testo, DB_DSN)
+config.php:7: define("DB_USERNAME", "root"); (DB_USERNAME, root)
+config.php:8: define("DB_PASSWORD", "P@$$w0rd"); (DB_PASSWORD, P@$$w0rd)
+config.php:9: define("CLASS_PATH", "classes"); (classes, CLASS_PATH)
+config.php:10: define("TEMPLATE_PATH", "templates"); (TEMPLATE_PATH, templates)
+[...]
+```
+
+### Print and save results
+
+Megagrep outputs results as colored text to stdout if `termcolor` is installed,
+or as raw text. Results can also be printed as CSV with options `-c`.
+
+```
+$> python megagrep.py -c -i "*.php" 
+[...]
+Login.php,51,public static function checkAuth($bank_id, $password) {,auth*,,,/path/to/classes/Login.php
+Login.php,53,$sql = "SELECT * FROM users WHERE bank_id='".$bank_id;,sql,,,/path/to/classes/Login.php
+Login.php,54,$sql = $sql."' AND password='".md5($password)."';";,sql|md5,,,/path/to/classes/Login.php
+Login.php,56,$st = $conn->prepare($sql);,sql,,,/path/to/classes/Login.php
+Login.php,57,$st->execute();,exec,,,/path/to/classes/Login.php
+[...]
+```
+
+The option `-f` can be used to store results to a file (`-c` and `-f` can be
+combined).
+
+### Improve Megagrep results
+
+#### Use and write dictionaries
 
 You can use default dictionaries in ``dicts/`` and also use your own:
 
@@ -211,20 +260,6 @@ passw*d
 pwd
 session
 admin*
-```
-
-You can choose to use only part of a dictionary with ``-l``:
-
-```
-python megagrep.py -l authentication
-```
-
-Option `-w` can be used to search specific words directly (alone or combined
-with a dictionary):
-
-```
-$> python megagrep.py -w bad,wrong # Search for words "bad" and "wrong" only
-$> python megagrep.py -w bad -d my_dict # Search for "bad" and the content of my_dict
 ```
 
 Coming soon

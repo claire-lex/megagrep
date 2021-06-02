@@ -5,6 +5,8 @@
 - "Strings" search mode for strings on one line starting and ending with `"`
 - "Comments" search mode for comments on one line starting with `#` or `//`
 - "Ls" search mode to display statistics about directory tree
+### Changed
+- README now explains how to begin a code review with Megagrep
 
 ## [1.0.0] 2021-05-18
 ### Added
