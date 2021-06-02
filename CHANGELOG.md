@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.0] 2021-??-??
+## [1.1.0] 2021-06-02
 ### Added
 - "Strings" search mode for strings on one line starting and ending with `"`
 - "Comments" search mode for comments on one line starting with `#` or `//`
