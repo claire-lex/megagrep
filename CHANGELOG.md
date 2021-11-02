@@ -2,6 +2,8 @@
 
 ## [?.?.?] ???
 ### Added
+- Comments mode improved with C-style multi-line comment support
+- Option `--tag` added, to choose a specific starting tag for one-line comments
 ### Changed
 - Dictionaries improved using OWASP code review guide and code review
   repositories
