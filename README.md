@@ -35,6 +35,8 @@ you can check [Graudit](https://github.com/wireghoul/graudit).
 ![Help wanted](https://img.shields.io/badge/Help%20me-New%20dictionaries-brightgreen)
 ![Useful statistics](https://img.shields.io/badge/Help%20me-Useful%20statistics-brightgreen)
 
+![Demo GIF](megagrep.gif)
+
 - [Getting Started](#getting-started)
 - [How to begin a code review with Megagrep](#how-to-begin-a-code-review-with-megagrep)
     1. [Tree and code discovery](#tree-and-code-discovery)
@@ -139,6 +141,9 @@ python megagrep -L
 [...]
 ```
 
+> This mode can be combined (though not necessarily relevant) with comment and
+  string mode.
+
 ### Keywords-based search
 
 By default, Megagrep outputs a list of lines containing keywords from its own
@@ -208,6 +213,18 @@ config.php:10: define("TEMPLATE_PATH", "templates"); (TEMPLATE_PATH, templates)
 [...]
 ```
 
+Comments mode will search for one-line comments starting with `//` and `#` and
+for C-style comments (`/* ... */`, on one or multiple lines). One can also
+choose a custom tag to use with option `-t`
+
+```
+$> python megagrep.py -C -t % -i "*.sty"
+[...]
+mybeamertheme.sty:3: % Requirement (Requirement)
+mybeamertheme.sty:10: % TODO (TODO)
+[...]
+```
+
 ### Print and save results
 
 Megagrep outputs results as colored text to stdout if `termcolor` is installed,
@@ -269,6 +286,4 @@ Coming soon
 * Export results as HTML
 * Add better dictionaries (help welcome!)
 * Improve "stat" mode content (ideas welcome!)
-* Improve "string" mode: Look for strings on multiple lines in source files.
-* Improve "comment" mode: Extract comments on multiple lines from source files.
 * Improve "ls" mode: Find keywords in filenames, locate specific files.

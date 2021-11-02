@@ -3,12 +3,12 @@
 #
 # Lex @ https://github.com/claire-lex/megagrep - 2021
 #
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name,anomalous-backslash-in-string
 
 """
 usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-L] [-C] [-T] [-i files)]
-                   [-x file(s)] [-w word(s)] [-d file(s)] [-l list(s] [-c]
-                   [-e] [-f filename]
+                   [-x file(s)] [-w word(s)] [-d file(s)] [-l list(s]
+                   [-t comment tag] [-c] [-e] [-f filename]
                    [path]
 
 Megagrep helps beginning a code review by looking at keywords using "grep".
@@ -40,6 +40,8 @@ optional arguments:
                         Use other dictionary file(s).
   -l list(s), --list list(s)
                         Use specific list from dictionary file(s).
+  -t comment tag, --tag comment tag
+                        Use a custom tag for one-line comments (ex: ;, ::).
   -c, --csv             Output in CSV format (default is colored ASCII).
   -e, --extended        Print extended output with previous and next lines.
   -f filename, --file filename
@@ -74,8 +76,24 @@ DEFAULT_EXCLUDE = ("*.min.js,*.css")
 
 #--- Search -----------------------------------------------------------#
 
+# Strings
+
 STRING_ONELINE_REGEX = re_compile("[^{0}]*{0}([^{0}]+){0}[^{0}]*".format("\""))
-COMMENT_ONELINE_REGEX = re_compile("(//.*|#.*)")
+
+# Comments
+
+# Basic, one-line comments starting with // or #
+COMMENT_DEFAULT_REGEX = re_compile("(?://|#)(.*)")
+# One-line and multi line C-style regex (/* ... */)
+COMMENT_CSTYLE_REGEX = re_compile("\/\*(\*[?!\/]|[^*]*)\*\/")
+# One-line and multi-line Docstrings (Python regex)
+COMMENT_PYDOC_REGEX = re_compile("[\"]{3}([\w\W]*?)[\"]{3}")
+
+COMMENT_REGEX_LIST = [
+    COMMENT_DEFAULT_REGEX,
+    COMMENT_CSTYLE_REGEX,
+    COMMENT_PYDOC_REGEX
+]
 
 #--- Output ------------------------------------------------------------------#
 
@@ -214,6 +232,7 @@ D_EXCLUDE = DEFAULT_EXCLUDE
 D_WORD = None
 D_DICT = None
 D_LIST = None
+D_TAG = None
 D_CSV = False
 D_EXTENDED = False
 D_FILE = None
@@ -234,6 +253,7 @@ H_EXCLUDE = "Files to exclude from search (ex: *.min.js)."
 H_WORD = "Search for specific word(s)."
 H_DICT = "Use other dictionary file(s)."
 H_LIST = "Use specific list from dictionary file(s)."
+H_TAG = "Use a custom tag for one-line comments (ex: ;, ::)."
 H_CSV = "Output in CSV format (default is colored ASCII)."
 H_EXTENDED = "Print extended output with previous and next lines."
 H_FILE = "Output to file."
@@ -242,6 +262,7 @@ H_FILE = "Output to file."
 M_FILE = "file(s)"
 M_WORD = "word(s)"
 M_LIST = "list(s)"
+M_TAG = "comment tag"
 M_NAME = "filename"
 
 # Options dictionary
@@ -267,6 +288,8 @@ OPTS_DICT = (
     ("-w", "--word", H_WORD, D_WORD, M_WORD),
     ("-d", "--dict", H_DICT, D_DICT, M_FILE),
     ("-l", "--list", H_LIST, D_LIST, M_LIST),
+    # Comments
+    ("-t", "--tag", H_TAG, D_TAG, M_TAG),
     # Output
     ("-c", "--csv", H_CSV, D_CSV, None),
     ("-e", "--extended", H_EXTENDED, D_EXTENDED, None),
@@ -366,6 +389,7 @@ def init_keywords() -> dict:
             k_regex += [REGEX(x) for x in keywords]
     # DEFAULT DICTIONARY
     if not keywords:
+        VERBOSE("No keyword found, using default dictionary.")
         keywords += parse_dict(DEFAULT_DICTIONARY, categories)
         k_regex += [REGEX(x) for x in keywords]
     return keywords, k_regex
@@ -517,7 +541,7 @@ class Stats(object):
     :param nb_file: Total number of scanned files.
     :param nb_line: Total number of scanned lines.
     :param nb_result: Total number of results.
-    :param nb_resline: Total number of lines with at least one result.
+.    :param nb_resline: Total number of lines with at least one result.
     """
     def __init__(self) -> None:
         self.nb_file = 0
@@ -565,9 +589,14 @@ def pattern_keyword(line: str) -> list:
 def pattern_comment(line: str) -> list:
     """One-line comments extraction mode."""
     found = []
-    index = finditer(COMMENT_ONELINE_REGEX, line)
-    for i in index:
-        found.append((i.start(1), i.group(1)))
+    if OPTIONS.tag:
+        regex_list = [re_compile("(?:{0})(.*)".format(OPTIONS.tag))]
+    else:
+        regex_list = COMMENT_REGEX_LIST
+    for regex in regex_list:
+        index = finditer(regex, line)
+        for i in index:
+            found.append((i.start(1), i.group(1)))
     return found
 
 def pattern_strings(line: str) -> list:
@@ -674,7 +703,7 @@ def top_keywords(results: list) -> list:
 
 def top_files(results: list) -> list:
     """Returns files with the most results."""
-    all_files = [x.path for x in results]
+    all_files = [relpath(x.path) for x in results]
     return top_counter(all_files)
 
 ###############################################################################
