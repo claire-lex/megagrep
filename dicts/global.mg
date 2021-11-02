@@ -1,5 +1,5 @@
 # Megagrep dictionary
-# Global keywords
+# Default keywords (very generic stuff)
 
 [authentication]
 auth* # authentication and authorization stuff
@@ -8,8 +8,10 @@ passw*d
 pwd
 session
 admin*
+cookie
+credential
 
-[injection]
+[input]
 sql
 query
 
@@ -19,6 +21,8 @@ crypt
 md5
 sha*1 # to match sha-1 and sha1
 token
+random
+base64
 
 [dangerous]
 exec
@@ -26,6 +30,8 @@ upload
 download
 buffer
 unsafe
+printf
+strcy
 
 [bypass]
 hack
@@ -42,3 +48,4 @@ TODO
 issue
 attention
 warning
+debug

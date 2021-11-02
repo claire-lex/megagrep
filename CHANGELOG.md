@@ -1,5 +1,11 @@
 # Changelog
 
+## [?.?.?] ???
+### Added
+### Changed
+- Dictionaries improved using OWASP code review guide and code review
+  repositories
+
 ## [1.1.0] 2021-06-02
 ### Added
 - "Strings" search mode for strings on one line starting and ending with `"`
