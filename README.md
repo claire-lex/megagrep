@@ -35,6 +35,8 @@ you can check [Graudit](https://github.com/wireghoul/graudit).
 ![Help wanted](https://img.shields.io/badge/Help%20me-New%20dictionaries-brightgreen)
 ![Useful statistics](https://img.shields.io/badge/Help%20me-Useful%20statistics-brightgreen)
 
+![Demo GIF](megagrep.gif)
+
 - [Getting Started](#getting-started)
 - [How to begin a code review with Megagrep](#how-to-begin-a-code-review-with-megagrep)
     1. [Tree and code discovery](#tree-and-code-discovery)

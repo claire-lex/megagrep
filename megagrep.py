@@ -703,7 +703,7 @@ def top_keywords(results: list) -> list:
 
 def top_files(results: list) -> list:
     """Returns files with the most results."""
-    all_files = [x.path for x in results]
+    all_files = [relpath(x.path) for x in results]
     return top_counter(all_files)
 
 ###############################################################################
