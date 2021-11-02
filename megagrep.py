@@ -3,7 +3,7 @@
 #
 # Lex @ https://github.com/claire-lex/megagrep - 2021
 #
-# pylint: disable=invalid-name
+# pylint: disable=invalid-name,anomalous-backslash-in-string
 
 """
 usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-L] [-C] [-T] [-i files)]
