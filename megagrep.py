@@ -227,6 +227,7 @@ D_STAT = False
 D_LS = False
 D_COMMENT = False
 D_STRINGS = False
+D_NAMES = False
 D_INCLUDE = None
 D_EXCLUDE = DEFAULT_EXCLUDE
 D_WORD = None
@@ -248,6 +249,7 @@ H_STAT = "Give only statistics about the code (rely on other modes)."
 H_LS = "Give results statistics on the source directory tree."
 H_COMMENT = "Search comments in the code."
 H_STRINGS = "Search strings in the code."
+H_NAMES = "Search for keywords in file names only."
 H_INCLUDE = "Files to include in search (ex: *.java)."
 H_EXCLUDE = "Files to exclude from search (ex: *.min.js)."
 H_WORD = "Search for specific word(s)."
@@ -281,6 +283,7 @@ OPTS_DICT = (
     ("-L", "--ls", H_LS, D_LS, None),
     ("-C", "--comment", H_COMMENT, D_COMMENT, None),
     ("-T", "--strings", H_STRINGS, D_STRINGS, None),
+    ("-N", "--names", H_NAMES, D_NAMES, None),
     # Input
     ("-i", "--include", H_INCLUDE, D_INCLUDE, M_FILE),
     ("-x", "--exclude", H_EXCLUDE, D_EXCLUDE, M_FILE),
@@ -670,15 +673,23 @@ def search(basepath: str, out:str = None) -> list:
             if is_included(item):
                 file_results = []
                 item_path = join(path, item)
-                for nb, line, content, before, after in megagenerator(item_path, stats):
-                    file_results.append(Result(nb, line, content, item_path, before,
-                                          after))
-                if len(file_results):
-                    top = [y for x, y in top_keywords(file_results)]
-                    PRINT_TREE(item_path, out=out)
-                    PRINT_TREE(item_path, "{0} results | Top: {1}".format(len(file_results),
-                                                                    ", ".join(top[:3])),
-                         out=out)
+                if OPTIONS.names:
+                    found = pattern_keyword(item)
+                    if len(found):
+                        file_results.append(
+                            Result(0, " - ".join((item, item_path)),
+                                   sorted(found), item_path,
+                                   "", ""))
+                else:
+                    for nb, line, content, before, after in megagenerator(item_path, stats):
+                        file_results.append(
+                            Result(nb, line, content, item_path, before, after))
+                    if len(file_results):
+                        top = [y for x, y in top_keywords(file_results)]
+                        PRINT_TREE(item_path, out=out)
+                        PRINT_TREE(item_path, "{0} results | Top: {1}".format(len(file_results),
+                                                                              ", ".join(top[:3])),
+                                   out=out)
                 results += file_results
     return results, stats
 

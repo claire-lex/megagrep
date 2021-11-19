@@ -1,5 +1,9 @@
 # Changelog
 
+## [?.?.?] ????-??-??
+### Added
+- Option `-N` to search for keywords in filenames
+
 ## [1.2.0] 2021-11-02
 ### Added
 - Comments mode improved with C-style multi-line comment support

@@ -286,4 +286,4 @@ Coming soon
 * Export results as HTML
 * Add better dictionaries (help welcome!)
 * Improve "stat" mode content (ideas welcome!)
-* Improve "ls" mode: Find keywords in filenames, locate specific files.
+* Mode to locate specific files
