@@ -6,7 +6,7 @@
 # pylint: disable=invalid-name,anomalous-backslash-in-string
 
 """
-usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-L] [-C] [-T] [-i files)]
+usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-L] [-C] [-T] [-N] [-i files)]
                    [-x file(s)] [-w word(s)] [-d file(s)] [-l list(s]
                    [-t comment tag] [-c] [-e] [-f filename]
                    [path]
@@ -30,6 +30,7 @@ optional arguments:
   -L, --ls              Give results statistics on the source directory tree.
   -C, --comment         Search comments in the code.
   -T, --strings         Search strings in the code.
+  -N, --names           Search for keywords in file names only.
   -i file(s), --include file(s)
                         Files to include in search (ex: *.java).
   -x file(s), --exclude file(s)
@@ -659,6 +660,34 @@ def megagenerator(filename: str, stats: Stats) -> None:
     except (IOError, UnicodeDecodeError):
         VERBOSE("Error while parsing file {0}.".format(filename))
 
+def name_search(filename: str, path: str) -> list:
+    """Search for keywords directly in filenames.
+
+    Returns a list containing Result object, or empty list if no pattern
+    was found.
+    """
+    found = pattern_keyword(filename)
+    if len(found):
+        out = " - ".join((filename, path))
+        return [Result(0, out, sorted(found), path, "", "")]
+    return []
+
+def content_search(path: str, stats: Stats, out:str = None) -> list:
+    """Search depending on the mode in the content of all matching files
+    from path.
+
+    Returns a list of a results for each file (or empty list).
+    """
+    file_results = []
+    for nb, line, content, before, after in megagenerator(path, stats):
+        file_results.append(Result(nb, line, content, path, before, after))
+        if len(file_results):
+            top = [y for x, y in top_keywords(file_results)]
+            PRINT_TREE(path, out=out)
+            PRINT_TREE(path, "{0} results | Top: {1}".format(
+                len(file_results), ", ".join(top[:3])), out=out)
+    return file_results
+
 def search(basepath: str, out:str = None) -> list:
     """Search keywords in all matching files from path."""
     stats = Stats()
@@ -674,22 +703,9 @@ def search(basepath: str, out:str = None) -> list:
                 file_results = []
                 item_path = join(path, item)
                 if OPTIONS.names:
-                    found = pattern_keyword(item)
-                    if len(found):
-                        file_results.append(
-                            Result(0, " - ".join((item, item_path)),
-                                   sorted(found), item_path,
-                                   "", ""))
+                    file_results += name_search(item, item_path)
                 else:
-                    for nb, line, content, before, after in megagenerator(item_path, stats):
-                        file_results.append(
-                            Result(nb, line, content, item_path, before, after))
-                    if len(file_results):
-                        top = [y for x, y in top_keywords(file_results)]
-                        PRINT_TREE(item_path, out=out)
-                        PRINT_TREE(item_path, "{0} results | Top: {1}".format(len(file_results),
-                                                                              ", ".join(top[:3])),
-                                   out=out)
+                    file_results += content_search(item_path, stats, out)
                 results += file_results
     return results, stats
 
