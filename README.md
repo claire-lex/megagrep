@@ -182,6 +182,15 @@ classes/Login.php:57: $st->execute();
 [...]
 ```
 
+You can also search for keywords only in file names with option `-N`:
+
+```
+$>python megagrep.py -N
+[...]
+classes/Login.php:0: Login.php - /path/to/classes/Login.php (login)
+templates/loginform.php:0: loginform.php - /path/to/templates/loginform.php (login)
+```
+
 To search **in specific files**, the include (`-i`) and exclude (`-x`) options
 can be used.
 
@@ -282,8 +291,8 @@ admin*
 Coming soon
 -----------
 
-* Add direct regex support in dictionaries with prefix `regex:`
-* Export results as HTML
 * Add better dictionaries (help welcome!)
 * Improve "stat" mode content (ideas welcome!)
-* Mode to locate specific files
+* Detext multi-line C-style comments with option `-C`
+* Add direct regex support in dictionaries with prefix `regex:`
+* Export results as HTML
