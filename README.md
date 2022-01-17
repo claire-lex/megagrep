@@ -194,8 +194,8 @@ templates/loginform.php:0: loginform.php - /path/to/templates/loginform.php (log
 To search **in specific files**, the include (`-i`) and exclude (`-x`) options
 can be used.
 
-To search **for specific keywords**, option `-w` can be used to search specific
-words directly (alone or combined with a dictionary):
+To search **for custom keywords**, option `-w` can be used (alone or combined
+with a dictionary):
 
 ```
 $> python megagrep.py -w bad,wrong # Search for words "bad" and "wrong" only
@@ -203,7 +203,7 @@ $> python megagrep.py -w bad -d my_dict # Search for "bad" and the content of my
 ```
 
 Finally, you can use your own dictionary file with `-d` (see below for syntax
-examples) or use part of a dictionary with `-l` to select a section (ex:
+examples) or use part of a dictionary with `-l` to select a category (ex:
 `authentication`).
 
 ### Other search modes
@@ -223,8 +223,8 @@ config.php:10: define("TEMPLATE_PATH", "templates"); (TEMPLATE_PATH, templates)
 ```
 
 Comments mode will search for one-line comments starting with `//` and `#` and
-for C-style comments (`/* ... */`, on one or multiple lines). One can also
-choose a custom tag to use with option `-t`
+for C-style comments (`/* ... */`, but only on one line so far). One can also
+choose a custom tag to use with option `-t`.
 
 ```
 $> python megagrep.py -C -t % -i "*.sty"
@@ -237,10 +237,11 @@ mybeamertheme.sty:10: % TODO (TODO)
 ### Print and save results
 
 Megagrep outputs results as colored text to stdout if `termcolor` is installed,
-or as raw text. Results can also be printed as CSV with options `-c`.
+or as raw text. Results can also be printed as CSV with option `-c`.
 
 ```
-$> python megagrep.py -c -i "*.php" 
+$> python megagrep.py -c -i "*.php"
+Filename,Line number,Line,Found,Status,Walkthrough,Full path
 [...]
 Login.php,51,public static function checkAuth($bank_id, $password) {,auth*,,,/path/to/classes/Login.php
 Login.php,53,$sql = "SELECT * FROM users WHERE bank_id='".$bank_id;,sql,,,/path/to/classes/Login.php
@@ -249,6 +250,9 @@ Login.php,56,$st = $conn->prepare($sql);,sql,,,/path/to/classes/Login.php
 Login.php,57,$st->execute();,exec,,,/path/to/classes/Login.php
 [...]
 ```
+
+> The "Status" and "Walkthrough" columns are empty, because they are meant to be
+  used by the reviewer. For now you have to edit the code to remove them.
 
 The option `-f` can be used to store results to a file (`-c` and `-f` can be
 combined).
@@ -288,11 +292,11 @@ session
 admin*
 ```
 
-Coming soon
------------
+Coming someday
+--------------
 
 * Add better dictionaries (help welcome!)
 * Improve "stat" mode content (ideas welcome!)
-* Detext multi-line C-style comments with option `-C`
+* Detect multi-line C-style comments with option `-C`
 * Add direct regex support in dictionaries with prefix `regex:`
 * Export results as HTML
