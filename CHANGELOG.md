@@ -3,6 +3,8 @@
 ## [?.?.?] ????-??-??
 ### Added
 - Option `-N` to search for keywords in filenames
+### Changed
+- Details on supported languages and limitations in README
 
 ## [1.2.0] 2021-11-02
 ### Added

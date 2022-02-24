@@ -11,9 +11,10 @@
 -------------------------------------------------------------------------------
 ```
 
-Megagrep helps beginning a code review by searching for patterns in the code
-using "grep". **It does not search for vulnerabilities directly but for places
-where you could manually find some**.
+Megagrep helps beginning a code review in
+([almost](#notes-on-supported-languages)) any language by searching for patterns
+in the code using "grep". **It does not search for vulnerabilities directly but
+for places where you could manually find some**.
 
 Megagrep searches for patterns in the code that require to be investigated
 manually for security issues. It uses several search modes (keyword-based,
@@ -45,6 +46,7 @@ you can check [Graudit](https://github.com/wireghoul/graudit).
     4. [Print and save results](#print-and-save-results)
     5. [Improve Megagrep results](#improve-megagrep-results)
         - [Use and write dictionaries](#use-and-write-dictionaries)
+- [Notes on supported languages](#notes-on-supported-languages)
 - [Coming soon](#coming-soon)
 
 Getting Started
@@ -292,6 +294,22 @@ session
 admin*
 ```
 
+Notes on supported languages
+----------------------------
+
+Megagrep works for any type of language with a syntax and coding conventions
+that **make use of words in a human language** (mostly in english): the keywords
+used in Megagrep, even custom ones that users are likely to use, probably rely
+on objects' names (user-defined or built in languages, libraries and
+frameworks). For instance, searching for ``password`` is only relevant when the
+language or the developer has the ability to use such word in her code.
+
+For languages that do not allow that (older or low-level languages), Megagrep
+default dictionaries are currently not suitable. However, it may work on some of
+these languages with appropriate custom dictionaries (for instance, by searching
+for dangerous sequences of language-defined keywords). Please share your
+experience with me if you find yourself in such a situation!
+
 Coming someday
 --------------
 
@@ -299,4 +317,4 @@ Coming someday
 * Improve "stat" mode content (ideas welcome!)
 * Detect multi-line C-style comments with option `-C`
 * Add direct regex support in dictionaries with prefix `regex:`
-* Export results as HTML
+* Export results as HTML or other formats (ideas welcome!)
