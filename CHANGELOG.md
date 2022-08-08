@@ -1,6 +1,6 @@
 # Changelog
 
-## [?.?.?] ????-??-??
+## [1.3.0] 2022-08-08
 ### Added
 - Option `-N` to search for keywords in filenames
 - Option `-n` to remove colors from output (for parsing purposes)

@@ -1,7 +1,7 @@
 # Megagrep
 # Locate critical areas and keywords in code
 #
-# Lex @ https://github.com/claire-lex/megagrep - 2021
+# Lex @ https://github.com/claire-lex/megagrep - 2022
 #
 # pylint: disable=invalid-name,anomalous-backslash-in-string
 
