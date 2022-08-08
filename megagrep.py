@@ -6,9 +6,9 @@
 # pylint: disable=invalid-name,anomalous-backslash-in-string
 
 """
-usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-L] [-C] [-T] [-N] [-i files)]
-                   [-x file(s)] [-w word(s)] [-d file(s)] [-l list(s]
-                   [-t comment tag] [-c] [-e] [-f filename]
+usage: megagrep.py [-h] [-v] [-s] [-n] [-K] [-S] [-L] [-C] [-T] [-N]
+                   [-i files)] [-x file(s)] [-w word(s)] [-d file(s)]
+                   [-l list(s] [-t comment tag] [-c] [-e] [-f filename]
                    [path]
 
 Megagrep helps beginning a code review by looking at keywords using "grep".
@@ -21,8 +21,8 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   -v, --verbose         Verbose mode.
-  -s, --sensitive       Enable case-sensitive mode (default is case
-                        insensitive).
+  -s, --sensitive       Enable case-sensitive mode (default: insensitive).
+  -n, --nocolor         Remove colors from output (e.g. for parsing).
   -K, --keyword         Search by keywords from a dictionary file (default
                         mode).
   -S, --stat            Give only statistics about the code (rely on other
@@ -137,21 +137,21 @@ def VERBOSE(message: str) -> None:
     """Prints additional information to stdout if ``verbose`` option is set."""
     if not OPTIONS.verbose:
         return
-    if IS_TERMCOLOR:
+    if IS_TERMCOLOR and not OPTIONS.nocolor:
         print(colored(fill("[INFO]    {0}".format(message), width=80), "cyan"))
     else:
         print(fill("[INFO]    {0}".format(message), width=80))
 
 def WARNING(message: str) -> None:
     """Prints warning messages (non-blocking errors) to stdout."""
-    if IS_TERMCOLOR:
+    if IS_TERMCOLOR and not OPTIONS.nocolor:
         print(colored(fill("[WARNING] {0}".format(message), width=80), "red"))
     else:
         print(fill("[WARNING] {0}".format(message), width=80))
 
 def ERROR(message: str) -> None:
     """Prints error messages to stdout and exits."""
-    if IS_TERMCOLOR:
+    if IS_TERMCOLOR and not OPTIONS.nocolor:
         print(colored(fill("[ERROR]   {0}".format(message), width=80), "red",
                       attrs=["bold"]))
     else:
@@ -223,6 +223,7 @@ def PRINT_TREE(path: str, message: str="", out: str=None) -> None:
 # Default values
 D_VERBOSE = False
 D_SENSITIVE = False
+D_NOCOLOR = False
 D_KEYWORD = True
 D_STAT = False
 D_LS = False
@@ -244,7 +245,8 @@ H_MEGAGREP = "Megagrep helps beginning a code review by looking at keywords \
 using \"grep\". This is not a static analysis tool, it just searches for \
 places in the code that require to be investigated manually."
 H_VERBOSE = "Verbose mode."
-H_SENSITIVE = "Enable case-sensitive mode (default is case insensitive)."
+H_SENSITIVE = "Enable case-sensitive mode (default: insensitive)."
+H_NOCOLOR = "Remove colors from output (e.g. for parsing)."
 H_KEYWORD = "Search by keywords from a dictionary file (default mode)."
 H_STAT = "Give only statistics about the code (rely on other modes)."
 H_LS = "Give results statistics on the source directory tree."
@@ -278,6 +280,7 @@ OPTS_DICT = (
     # Behavior
     ("-v", "--verbose", H_VERBOSE, D_VERBOSE, None),
     ("-s", "--sensitive", H_SENSITIVE, D_SENSITIVE, None),
+    ("-n", "--nocolor", H_NOCOLOR, D_NOCOLOR, None),
     # Mode
     ("-K", "--keyword", H_KEYWORD, D_KEYWORD, None),
     ("-S", "--stat", H_STAT, D_STAT, None),
@@ -512,7 +515,7 @@ class Result(object):
 
     def highlight(self) -> str:
         """Change color for all keywords found in line."""
-        if not IS_TERMCOLOR:
+        if not IS_TERMCOLOR or OPTIONS.nocolor:
             return self.line
         hlstr = []
         start = 0
@@ -531,9 +534,9 @@ class Result(object):
         loc = "{0}:{1}".format(self.relpath, self.line_no)
         line = shorten(self.highlight(), width=MAX_LEN)
         found = ", ".join(self.keywords)
-        if IS_TERMCOLOR:
+        if IS_TERMCOLOR and not OPTIONS.nocolor:
             return "{0}: {1} ({2})".format(colored(loc, "cyan"), line, colored(found, "magenta"))
-        return self.result
+        return "{0}: {1} ({2})".format(loc, line, found)
 
 #-----------------------------------------------------------------------------#
 # Stats object                                                                #

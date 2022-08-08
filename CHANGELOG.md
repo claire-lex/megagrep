@@ -3,6 +3,7 @@
 ## [?.?.?] ????-??-??
 ### Added
 - Option `-N` to search for keywords in filenames
+- Option `-n` to remove colors from output (for parsing purposes)
 ### Changed
 - Details on supported languages and limitations in README
 
