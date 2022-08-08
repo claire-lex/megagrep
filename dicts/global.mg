@@ -23,6 +23,7 @@ sha*1 # to match sha-1 and sha1
 token
 random
 base64
+secret
 
 [dangerous]
 exec

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0] 2022-08-08
+### Added
+- Option `-N` to search for keywords in filenames
+- Option `-n` to remove colors from output (for parsing purposes)
+### Changed
+- Details on supported languages and limitations in README
+
 ## [1.2.0] 2021-11-02
 ### Added
 - Comments mode improved with C-style multi-line comment support

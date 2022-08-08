@@ -1,14 +1,14 @@
 # Megagrep
 # Locate critical areas and keywords in code
 #
-# Lex @ https://github.com/claire-lex/megagrep - 2021
+# Lex @ https://github.com/claire-lex/megagrep - 2022
 #
 # pylint: disable=invalid-name,anomalous-backslash-in-string
 
 """
-usage: megagrep.py [-h] [-v] [-s] [-K] [-S] [-L] [-C] [-T] [-i files)]
-                   [-x file(s)] [-w word(s)] [-d file(s)] [-l list(s]
-                   [-t comment tag] [-c] [-e] [-f filename]
+usage: megagrep.py [-h] [-v] [-s] [-n] [-K] [-S] [-L] [-C] [-T] [-N]
+                   [-i files)] [-x file(s)] [-w word(s)] [-d file(s)]
+                   [-l list(s] [-t comment tag] [-c] [-e] [-f filename]
                    [path]
 
 Megagrep helps beginning a code review by looking at keywords using "grep".
@@ -21,8 +21,8 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   -v, --verbose         Verbose mode.
-  -s, --sensitive       Enable case-sensitive mode (default is case
-                        insensitive).
+  -s, --sensitive       Enable case-sensitive mode (default: insensitive).
+  -n, --nocolor         Remove colors from output (e.g. for parsing).
   -K, --keyword         Search by keywords from a dictionary file (default
                         mode).
   -S, --stat            Give only statistics about the code (rely on other
@@ -30,6 +30,7 @@ optional arguments:
   -L, --ls              Give results statistics on the source directory tree.
   -C, --comment         Search comments in the code.
   -T, --strings         Search strings in the code.
+  -N, --names           Search for keywords in file names only.
   -i file(s), --include file(s)
                         Files to include in search (ex: *.java).
   -x file(s), --exclude file(s)
@@ -136,21 +137,21 @@ def VERBOSE(message: str) -> None:
     """Prints additional information to stdout if ``verbose`` option is set."""
     if not OPTIONS.verbose:
         return
-    if IS_TERMCOLOR:
+    if IS_TERMCOLOR and not OPTIONS.nocolor:
         print(colored(fill("[INFO]    {0}".format(message), width=80), "cyan"))
     else:
         print(fill("[INFO]    {0}".format(message), width=80))
 
 def WARNING(message: str) -> None:
     """Prints warning messages (non-blocking errors) to stdout."""
-    if IS_TERMCOLOR:
+    if IS_TERMCOLOR and not OPTIONS.nocolor:
         print(colored(fill("[WARNING] {0}".format(message), width=80), "red"))
     else:
         print(fill("[WARNING] {0}".format(message), width=80))
 
 def ERROR(message: str) -> None:
     """Prints error messages to stdout and exits."""
-    if IS_TERMCOLOR:
+    if IS_TERMCOLOR and not OPTIONS.nocolor:
         print(colored(fill("[ERROR]   {0}".format(message), width=80), "red",
                       attrs=["bold"]))
     else:
@@ -222,11 +223,13 @@ def PRINT_TREE(path: str, message: str="", out: str=None) -> None:
 # Default values
 D_VERBOSE = False
 D_SENSITIVE = False
+D_NOCOLOR = False
 D_KEYWORD = True
 D_STAT = False
 D_LS = False
 D_COMMENT = False
 D_STRINGS = False
+D_NAMES = False
 D_INCLUDE = None
 D_EXCLUDE = DEFAULT_EXCLUDE
 D_WORD = None
@@ -242,12 +245,14 @@ H_MEGAGREP = "Megagrep helps beginning a code review by looking at keywords \
 using \"grep\". This is not a static analysis tool, it just searches for \
 places in the code that require to be investigated manually."
 H_VERBOSE = "Verbose mode."
-H_SENSITIVE = "Enable case-sensitive mode (default is case insensitive)."
+H_SENSITIVE = "Enable case-sensitive mode (default: insensitive)."
+H_NOCOLOR = "Remove colors from output (e.g. for parsing)."
 H_KEYWORD = "Search by keywords from a dictionary file (default mode)."
 H_STAT = "Give only statistics about the code (rely on other modes)."
 H_LS = "Give results statistics on the source directory tree."
 H_COMMENT = "Search comments in the code."
 H_STRINGS = "Search strings in the code."
+H_NAMES = "Search for keywords in file names only."
 H_INCLUDE = "Files to include in search (ex: *.java)."
 H_EXCLUDE = "Files to exclude from search (ex: *.min.js)."
 H_WORD = "Search for specific word(s)."
@@ -275,12 +280,14 @@ OPTS_DICT = (
     # Behavior
     ("-v", "--verbose", H_VERBOSE, D_VERBOSE, None),
     ("-s", "--sensitive", H_SENSITIVE, D_SENSITIVE, None),
+    ("-n", "--nocolor", H_NOCOLOR, D_NOCOLOR, None),
     # Mode
     ("-K", "--keyword", H_KEYWORD, D_KEYWORD, None),
     ("-S", "--stat", H_STAT, D_STAT, None),
     ("-L", "--ls", H_LS, D_LS, None),
     ("-C", "--comment", H_COMMENT, D_COMMENT, None),
     ("-T", "--strings", H_STRINGS, D_STRINGS, None),
+    ("-N", "--names", H_NAMES, D_NAMES, None),
     # Input
     ("-i", "--include", H_INCLUDE, D_INCLUDE, M_FILE),
     ("-x", "--exclude", H_EXCLUDE, D_EXCLUDE, M_FILE),
@@ -508,7 +515,7 @@ class Result(object):
 
     def highlight(self) -> str:
         """Change color for all keywords found in line."""
-        if not IS_TERMCOLOR:
+        if not IS_TERMCOLOR or OPTIONS.nocolor:
             return self.line
         hlstr = []
         start = 0
@@ -527,9 +534,9 @@ class Result(object):
         loc = "{0}:{1}".format(self.relpath, self.line_no)
         line = shorten(self.highlight(), width=MAX_LEN)
         found = ", ".join(self.keywords)
-        if IS_TERMCOLOR:
+        if IS_TERMCOLOR and not OPTIONS.nocolor:
             return "{0}: {1} ({2})".format(colored(loc, "cyan"), line, colored(found, "magenta"))
-        return self.result
+        return "{0}: {1} ({2})".format(loc, line, found)
 
 #-----------------------------------------------------------------------------#
 # Stats object                                                                #
@@ -656,6 +663,34 @@ def megagenerator(filename: str, stats: Stats) -> None:
     except (IOError, UnicodeDecodeError):
         VERBOSE("Error while parsing file {0}.".format(filename))
 
+def name_search(filename: str, path: str) -> list:
+    """Search for keywords directly in filenames.
+
+    Returns a list containing Result object, or empty list if no pattern
+    was found.
+    """
+    found = pattern_keyword(filename)
+    if len(found):
+        out = " - ".join((filename, path))
+        return [Result(0, out, sorted(found), path, "", "")]
+    return []
+
+def content_search(path: str, stats: Stats, out:str = None) -> list:
+    """Search depending on the mode in the content of all matching files
+    from path.
+
+    Returns a list of a results for each file (or empty list).
+    """
+    file_results = []
+    for nb, line, content, before, after in megagenerator(path, stats):
+        file_results.append(Result(nb, line, content, path, before, after))
+        if len(file_results):
+            top = [y for x, y in top_keywords(file_results)]
+            PRINT_TREE(path, out=out)
+            PRINT_TREE(path, "{0} results | Top: {1}".format(
+                len(file_results), ", ".join(top[:3])), out=out)
+    return file_results
+
 def search(basepath: str, out:str = None) -> list:
     """Search keywords in all matching files from path."""
     stats = Stats()
@@ -670,15 +705,10 @@ def search(basepath: str, out:str = None) -> list:
             if is_included(item):
                 file_results = []
                 item_path = join(path, item)
-                for nb, line, content, before, after in megagenerator(item_path, stats):
-                    file_results.append(Result(nb, line, content, item_path, before,
-                                          after))
-                if len(file_results):
-                    top = [y for x, y in top_keywords(file_results)]
-                    PRINT_TREE(item_path, out=out)
-                    PRINT_TREE(item_path, "{0} results | Top: {1}".format(len(file_results),
-                                                                    ", ".join(top[:3])),
-                         out=out)
+                if OPTIONS.names:
+                    file_results += name_search(item, item_path)
+                else:
+                    file_results += content_search(item_path, stats, out)
                 results += file_results
     return results, stats
 
