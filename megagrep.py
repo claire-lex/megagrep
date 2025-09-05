@@ -47,6 +47,8 @@ optional arguments:
   -e, --extended        Print extended output with previous and next lines.
   -f filename, --file filename
                         Output to file.
+  -I dir(s), --ignore-dir dir(s)
+                        Ignore specified directories (comma-separated, ex: node_modules,.git)
 """
 
 from os import access, R_OK, getcwd, walk
@@ -262,6 +264,7 @@ H_TAG = "Use a custom tag for one-line comments (ex: ;, ::)."
 H_CSV = "Output in CSV format (default is colored ASCII)."
 H_EXTENDED = "Print extended output with previous and next lines."
 H_FILE = "Output to file."
+H_IGNORE_DIR = "Ignore specified directories (comma-separated, ex: node_modules,.git)" # AJOUT IGNORE_DIRS
 
 # Meta text
 M_FILE = "file(s)"
@@ -269,6 +272,7 @@ M_WORD = "word(s)"
 M_LIST = "list(s)"
 M_TAG = "comment tag"
 M_NAME = "filename"
+M_DIR = "dir(s)" # AJOUT IGNORE_DIRS
 
 # Options dictionary
 SOPT = 0 # Short option
@@ -300,7 +304,9 @@ OPTS_DICT = (
     # Output
     ("-c", "--csv", H_CSV, D_CSV, None),
     ("-e", "--extended", H_EXTENDED, D_EXTENDED, None),
-    ("-f", "--file", H_FILE, D_FILE, M_NAME)
+    ("-f", "--file", H_FILE, D_FILE, M_NAME),
+    # Ignore directories
+    ("-I", "--ignore-dir", H_IGNORE_DIR, None, M_DIR), # AJOUT IGNORE_DIRS
 )
 
 #-----------------------------------------------------------------------------#
@@ -697,9 +703,9 @@ def search(basepath: str, out:str = None) -> list:
     results = []
     for path, dirs, files in walk(basepath):
         PRINT_TREE(path, out=out)
-        # Ignore hidden
+        # Ignore hidden and ignored directories
+        dirs[:] = [d for d in dirs if not d[0] == '.' and d not in IGNORE_DIRS] # AJOUT IGNORE_DIRS
         files = [f for f in files if not f[0] == '.']
-        dirs[:] = [d for d in dirs if not d[0] == '.']
         for item in files:
             # Apply include and exclude list on item name
             if is_included(item):
@@ -752,6 +758,12 @@ print("{0:-^79}".format(""))
 #--- Init -------------------------------------------------------------------#
 
 OPTIONS = init_options()
+# AJOUT IGNORE_DIRS
+IGNORE_DIRS = []
+if hasattr(OPTIONS, "ignore_dir") and OPTIONS.ignore_dir:
+    IGNORE_DIRS = [d.strip() for d in OPTIONS.ignore_dir.split(",") if d.strip()]
+    VERBOSE("Directories ignored: {0}".format(", ".join(IGNORE_DIRS)))
+
 VERBOSE("{0:-^69}".format(" Initialization "))
 VERBOSE("Options: {0}".format(OPTIONS.__dict__))
 KEYWORDS, K_REGEX = init_keywords()
