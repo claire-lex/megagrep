@@ -1,7 +1,7 @@
 # Megagrep
 # Locate critical areas and keywords in code
 #
-# Lex @ https://github.com/claire-lex/megagrep - 2022
+# Lex @ https://github.com/claire-lex/megagrep - 2022-2026
 #
 # pylint: disable=invalid-name,anomalous-backslash-in-string
 
@@ -54,7 +54,7 @@ from os.path import dirname, join, realpath, relpath, exists, isfile, basename
 from textwrap import fill, shorten
 from argparse import ArgumentParser
 from importlib.util import find_spec
-from re import finditer, IGNORECASE
+from re import finditer, IGNORECASE, DOTALL
 from re import compile as re_compile, escape as re_escape
 
 ###############################################################################
@@ -86,9 +86,9 @@ STRING_ONELINE_REGEX = re_compile("[^{0}]*{0}([^{0}]+){0}[^{0}]*".format("\""))
 # Basic, one-line comments starting with // or #
 COMMENT_DEFAULT_REGEX = re_compile("(?://|#)(.*)")
 # One-line and multi line C-style regex (/* ... */)
-COMMENT_CSTYLE_REGEX = re_compile("\/\*(\*[?!\/]|[^*]*)\*\/")
+COMMENT_CSTYLE_REGEX = re_compile(r"\/\*(\*[?!\/]|[^*]*)\*\/")
 # One-line and multi-line Docstrings (Python regex)
-COMMENT_PYDOC_REGEX = re_compile("[\"]{3}([\w\W]*?)[\"]{3}")
+COMMENT_PYDOC_REGEX = re_compile(r"[\"]{3}([\w\W]*?)[\"]{3}")
 
 COMMENT_REGEX_LIST = [
     COMMENT_DEFAULT_REGEX,
@@ -695,6 +695,9 @@ def search(basepath: str, out:str = None) -> list:
     """Search keywords in all matching files from path."""
     stats = Stats()
     results = []
+    # If the argument is a file and not a path, we read it directly.
+    if isfile(basepath):
+        results += content_search(basepath, stats, out)
     for path, dirs, files in walk(basepath):
         PRINT_TREE(path, out=out)
         # Ignore hidden
